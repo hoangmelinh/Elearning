@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  backend:
+    # Thay <your-dockerhub-username> bằng tên tài khoản Docker Hub của bạn
+    image: hoangmelinh/elearning-backend:latest
+    container_name: elearning-backend
+    ports:
+      - "8081:8081"
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+      # Chuỗi kết nối lấy từ Neon.tech hoặc Supabase
+      - DB_URL=${DB_URL}
+      - DB_USER=${DB_USER}
+      - DB_PASS=${DB_PASS}
+      - JWT_SECRET=${JWT_SECRET}
+      - AWS_REGION=${AWS_REGION}
+      - AWS_BUCKET=${AWS_BUCKET}
+      - NVIDIA_API_KEY=${NVIDIA_API_KEY}
+    restart: always
+
+  frontend:
+    image: hoangmelinh/elearning-frontend:latest
+    container_name: elearning-frontend
+    ports:
+      - "80:80"
+    restart: always
