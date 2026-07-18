@@ -1,0 +1,318 @@
+-- ============================================================
+-- SCHEMA: Website Học Tiếng Anh & Tiếng Trung Trực Tuyến
+-- Database: PostgreSQL
+-- Hỗ trợ song ngữ: English (en) & Chinese/Mandarin (zh)
+--   - phonetic: IPA cho tiếng Anh, Pinyin cho tiếng Trung
+--   - Các bảng nội dung (deck, video, exercise, writing prompt)
+--     đều có cột `language` để phân luồng dữ liệu theo ngôn ngữ
+-- ============================================================
+
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- ============================================================
+-- 1. ENUM TYPES
+-- ============================================================
+
+CREATE TYPE user_role AS ENUM ('student', 'admin');
+CREATE TYPE user_status AS ENUM ('active', 'locked');
+
+-- 'zh' = tiếng Trung (Mandarin). Có thể mở rộng sau: zh_tw, ja, ko...
+CREATE TYPE content_language AS ENUM ('en', 'zh');
+
+CREATE TYPE document_file_type AS ENUM ('txt', 'csv', 'docx', 'text_paste');
+CREATE TYPE flashcard_status AS ENUM ('new', 'learning', 'mastered');
+CREATE TYPE video_source_type AS ENUM ('youtube', 'upload');
+CREATE TYPE exercise_skill_type AS ENUM ('listening', 'reading');
+CREATE TYPE question_type AS ENUM ('multiple_choice', 'fill_blank');
+CREATE TYPE subtitle_language AS ENUM ('source', 'vi'); -- source = ngôn ngữ gốc (en/zh)
+
+-- ============================================================
+-- 2. XÁC THỰC & NGƯỜI DÙNG
+-- ============================================================
+
+CREATE TABLE users (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    full_name       VARCHAR(100) NOT NULL,
+    email           VARCHAR(150) UNIQUE NOT NULL,
+    phone           VARCHAR(20) UNIQUE,
+    password_hash   VARCHAR(255) NOT NULL,
+    role            user_role NOT NULL DEFAULT 'student',
+    status          user_status NOT NULL DEFAULT 'active',
+    avatar_url      VARCHAR(255),
+    -- Ngôn ngữ đang học chính (phục vụ cá nhân hóa trang chủ, gợi ý nội dung)
+    primary_learning_language content_language,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE password_reset_tokens (
+    id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    otp_code    VARCHAR(10) NOT NULL,
+    expires_at  TIMESTAMPTZ NOT NULL,
+    is_used     BOOLEAN NOT NULL DEFAULT false,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_password_reset_tokens_user ON password_reset_tokens(user_id);
+
+-- ============================================================
+-- 3. PHÂN HỆ TỪ VỰNG (FLASHCARD)
+-- ============================================================
+
+CREATE TABLE documents (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    uploaded_by     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    file_name       VARCHAR(255) NOT NULL,
+    file_type       document_file_type NOT NULL,
+    file_url        VARCHAR(255),        -- S3 object URL/key; NULL nếu dán văn bản trực tiếp
+    file_size_kb    INT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_documents_uploaded_by ON documents(uploaded_by);
+
+CREATE TABLE flashcard_decks (
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name                VARCHAR(150) NOT NULL,
+    -- 'zh': deck từ vựng tiếng Trung (term lưu chữ Hán, phonetic lưu Pinyin)
+    language            content_language NOT NULL,
+    owner_id            UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    source_document_id  UUID REFERENCES documents(id) ON DELETE SET NULL,
+    is_public           BOOLEAN NOT NULL DEFAULT false,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_flashcard_decks_owner ON flashcard_decks(owner_id);
+CREATE INDEX idx_flashcard_decks_language ON flashcard_decks(language);
+
+CREATE TABLE flashcards (
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    deck_id             UUID NOT NULL REFERENCES flashcard_decks(id) ON DELETE CASCADE,
+    term                VARCHAR(255) NOT NULL,   -- Từ gốc: English word HOẶC chữ Hán (汉字)
+    phonetic            VARCHAR(255),            -- IPA (English) hoặc Pinyin có thanh điệu (Trung, vd: nǐ hǎo)
+    meaning_vi          VARCHAR(255) NOT NULL,
+    example_sentence    TEXT,
+    audio_url           VARCHAR(255),            -- S3 object URL (phát âm mẫu)
+    is_ai_generated     BOOLEAN NOT NULL DEFAULT false,
+    is_edited           BOOLEAN NOT NULL DEFAULT false, -- true nếu user đã sửa nội dung AI trích xuất
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_flashcards_deck ON flashcards(deck_id);
+
+CREATE TABLE user_flashcard_progress (
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id             UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    flashcard_id        UUID NOT NULL REFERENCES flashcards(id) ON DELETE CASCADE,
+    status              flashcard_status NOT NULL DEFAULT 'new',
+    review_count        INT NOT NULL DEFAULT 0,
+    last_reviewed_at    TIMESTAMPTZ,
+    UNIQUE (user_id, flashcard_id)
+);
+CREATE INDEX idx_ufp_user ON user_flashcard_progress(user_id);
+CREATE INDEX idx_ufp_flashcard ON user_flashcard_progress(flashcard_id);
+
+CREATE TABLE matching_results (
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id             UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    deck_id             UUID NOT NULL REFERENCES flashcard_decks(id) ON DELETE CASCADE,
+    score               INT NOT NULL,
+    time_taken_seconds  INT NOT NULL,
+    completed_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_matching_results_user ON matching_results(user_id);
+CREATE INDEX idx_matching_results_deck ON matching_results(deck_id);
+
+-- ============================================================
+-- 4. PHÂN HỆ LUYỆN NGHE (VIDEO & AUDIO)
+-- ============================================================
+
+CREATE TABLE videos (
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    title               VARCHAR(255) NOT NULL,
+    language            content_language NOT NULL,  -- 'zh' = video tiếng Trung
+    source_type         video_source_type NOT NULL,
+    video_url           VARCHAR(255) NOT NULL,      -- S3 URL (upload) hoặc link nhúng (youtube)
+    duration_seconds    INT,
+    created_by          UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_videos_language ON videos(language);
+
+CREATE TABLE subtitles (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    video_id        UUID NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+    -- 'source' = phụ đề gốc (English hoặc Hán/Pinyin tùy video.language), 'vi' = phụ đề tiếng Việt
+    language        subtitle_language NOT NULL,
+    start_time_ms   INT NOT NULL,
+    end_time_ms     INT NOT NULL,
+    text            TEXT NOT NULL,
+    order_index     INT NOT NULL
+);
+CREATE INDEX idx_subtitles_video ON subtitles(video_id, order_index);
+
+-- Dùng chung cho Listening (LIS-02) và Reading (TEST-01)
+CREATE TABLE exercises (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    skill_type      exercise_skill_type NOT NULL,
+    title           VARCHAR(255) NOT NULL,
+    video_id        UUID REFERENCES videos(id) ON DELETE CASCADE,  -- có nếu skill_type = 'listening'
+    passage_text    TEXT,                                          -- có nếu skill_type = 'reading'; tiếng Trung lưu chữ Hán
+    language        content_language NOT NULL,
+    level           VARCHAR(20),   -- Sơ cấp / Trung cấp / Cao cấp (HSK level nếu tiếng Trung)
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT chk_exercise_source CHECK (
+        (skill_type = 'listening' AND video_id IS NOT NULL)
+        OR (skill_type = 'reading' AND passage_text IS NOT NULL)
+    )
+);
+CREATE INDEX idx_exercises_video ON exercises(video_id);
+CREATE INDEX idx_exercises_skill_language ON exercises(skill_type, language);
+
+CREATE TABLE questions (
+    id                      UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    exercise_id             UUID NOT NULL REFERENCES exercises(id) ON DELETE CASCADE,
+    question_type           question_type NOT NULL,
+    question_text           TEXT NOT NULL,
+    correct_answer_text     VARCHAR(255),  -- dùng cho dạng fill_blank
+    order_index             INT NOT NULL
+);
+CREATE INDEX idx_questions_exercise ON questions(exercise_id, order_index);
+
+CREATE TABLE answer_options (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    question_id     UUID NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
+    option_text     VARCHAR(255) NOT NULL,
+    is_correct      BOOLEAN NOT NULL DEFAULT false
+);
+CREATE INDEX idx_answer_options_question ON answer_options(question_id);
+
+CREATE TABLE user_attempts (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    exercise_id     UUID NOT NULL REFERENCES exercises(id) ON DELETE CASCADE,
+    score           DECIMAL(5,2) NOT NULL DEFAULT 0,
+    started_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    completed_at    TIMESTAMPTZ
+    -- Lưu ý: KHÔNG có UNIQUE(user_id, exercise_id) — cho phép làm lại nhiều lần,
+    -- mỗi lần làm sinh 1 row riêng để giữ toàn bộ lịch sử.
+);
+CREATE INDEX idx_user_attempts_user ON user_attempts(user_id);
+CREATE INDEX idx_user_attempts_exercise ON user_attempts(exercise_id);
+
+CREATE TABLE user_answers (
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    attempt_id          UUID NOT NULL REFERENCES user_attempts(id) ON DELETE CASCADE,
+    question_id         UUID NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
+    selected_option_id  UUID REFERENCES answer_options(id) ON DELETE SET NULL,
+    answer_text         VARCHAR(255),  -- dùng cho fill_blank
+    is_correct          BOOLEAN NOT NULL DEFAULT false
+);
+CREATE INDEX idx_user_answers_attempt ON user_answers(attempt_id);
+CREATE INDEX idx_user_answers_question ON user_answers(question_id);
+
+-- ============================================================
+-- 5. PHÂN HỆ LUYỆN NÓI & AI
+-- ============================================================
+
+CREATE TABLE speaking_recordings (
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id             UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    language            content_language NOT NULL DEFAULT 'en', -- luyện nói tiếng Anh hay tiếng Trung
+    prompt_text         TEXT,          -- câu mẫu (có thể là chữ Hán + pinyin)
+    audio_url           VARCHAR(255) NOT NULL,   -- S3 object URL
+    transcript_text     TEXT,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- Auto-delete audio khỏi S3 sau 15 ngày (S3 Lifecycle Rule đọc field này)
+    expires_at          TIMESTAMPTZ NOT NULL DEFAULT (now() + INTERVAL '15 days'),
+    is_deleted          BOOLEAN NOT NULL DEFAULT false  -- true khi file audio đã bị xóa khỏi S3
+);
+CREATE INDEX idx_speaking_recordings_user ON speaking_recordings(user_id);
+CREATE INDEX idx_speaking_recordings_expires ON speaking_recordings(expires_at) WHERE is_deleted = false;
+
+CREATE TABLE speaking_analysis (
+    id                      UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    recording_id            UUID NOT NULL UNIQUE REFERENCES speaking_recordings(id) ON DELETE CASCADE,
+    pronunciation_score     DECIMAL(5,2),
+    grammar_errors          JSONB,   -- danh sách lỗi ngữ pháp có cấu trúc
+    suggestions             JSONB,   -- gợi ý cải thiện (cấu trúc câu chuẩn hơn, phát âm/thanh điệu đúng...)
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- ============================================================
+-- 6. PHÂN HỆ VIẾT & KIỂM TRA TỔNG HỢP
+-- ============================================================
+
+CREATE TABLE writing_prompts (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    title           VARCHAR(255) NOT NULL,
+    description     TEXT NOT NULL,
+    language        content_language NOT NULL,  -- 'zh' = đề viết bằng chữ Hán
+    level           VARCHAR(20)
+);
+
+CREATE TABLE writing_submissions (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    prompt_id       UUID NOT NULL REFERENCES writing_prompts(id) ON DELETE CASCADE,
+    content         TEXT NOT NULL,  -- bài viết của user (chữ Hán nếu prompt.language = 'zh')
+    submitted_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_writing_submissions_user ON writing_submissions(user_id);
+CREATE INDEX idx_writing_submissions_prompt ON writing_submissions(prompt_id);
+
+CREATE TABLE writing_feedback (
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    submission_id       UUID NOT NULL UNIQUE REFERENCES writing_submissions(id) ON DELETE CASCADE,
+    grammar_score       DECIMAL(5,2),
+    vocabulary_score    DECIMAL(5,2),
+    overall_score       DECIMAL(5,2),
+    detailed_feedback   JSONB,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE learning_progress (
+    id                          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id                     UUID NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+    total_flashcards_mastered   INT NOT NULL DEFAULT 0,
+    total_exercises_completed   INT NOT NULL DEFAULT 0,
+    streak_days                 INT NOT NULL DEFAULT 0,
+    last_activity_date          DATE,
+    updated_at                  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- ============================================================
+-- 7. TRIGGER: tự động cập nhật updated_at
+-- ============================================================
+
+CREATE OR REPLACE FUNCTION set_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = now();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_users_updated_at BEFORE UPDATE ON users
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_decks_updated_at BEFORE UPDATE ON flashcard_decks
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_flashcards_updated_at BEFORE UPDATE ON flashcards
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_progress_updated_at BEFORE UPDATE ON learning_progress
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- ============================================================
+-- GHI CHÚ TRIỂN KHAI
+-- ============================================================
+-- 1. Hỗ trợ tiếng Trung: đảm bảo DB encoding = UTF8 (mặc định PostgreSQL),
+--    và collation hỗ trợ sắp xếp/tìm kiếm Hán tự nếu cần (vd: zh_CN.utf8)
+--    khi tạo database:
+--    CREATE DATABASE elearning_db WITH ENCODING 'UTF8' LC_COLLATE='zh_CN.utf8' LC_CTYPE='zh_CN.utf8' TEMPLATE=template0;
+--    (Nếu server không có sẵn locale zh_CN.utf8, dùng 'en_US.utf8' vẫn lưu/hiển thị
+--     Hán tự đúng vì UTF8 hỗ trợ mọi ký tự Unicode — locale chỉ ảnh hưởng ORDER BY/sort).
+-- 2. Cân nhắc thêm full-text search index (pg_trgm / zhparser) cho bảng flashcards.term
+--    nếu cần tính năng tìm kiếm từ vựng tiếng Trung theo pinyin hoặc bộ thủ sau này.
+-- 3. S3 Lifecycle Rule cho bucket recordings/ nên đặt rule xóa vật lý sau 15 ngày,
+--    đồng bộ với cột speaking_recordings.expires_at (cần 1 cron job/Lambda cập nhật
+--    is_deleted = true sau khi S3 xác nhận đã xóa).
+-- ============================================================

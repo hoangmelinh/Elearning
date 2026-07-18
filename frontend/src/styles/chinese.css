@@ -1,0 +1,12 @@
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap');
+
+/* Apply Noto Sans SC to any element specifically rendering Chinese content */
+.lang-zh {
+    font-family: 'Noto Sans SC', system-ui, -apple-system, sans-serif !important;
+}
+
+/* Ensure textarea with Chinese has proper line-height and letter-spacing */
+textarea.lang-zh {
+    line-height: 1.8;
+    letter-spacing: 1px;
+}
