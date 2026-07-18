@@ -76,8 +76,14 @@ const SpellingPracticePage: React.FC = () => {
     try {
       setLoading(true);
       const res = await httpClient.get(`/decks/${deckId}/flashcards`);
-      const fetched: Flashcard[] = res.data.data.cards ?? [];
+      const fetchedRaw: any[] = res.data.data.cards ?? [];
       
+      const fetched: Flashcard[] = fetchedRaw.map(c => ({
+        ...c,
+        meaning_vi: c.meaning_vi || c.meaningVi || '',
+        example_sentence: c.example_sentence || c.exampleSentence || ''
+      }));
+
       let subset: Flashcard[] = [];
       if (mode === 'random') {
         const shuffled = [...fetched].sort(() => Math.random() - 0.5);
