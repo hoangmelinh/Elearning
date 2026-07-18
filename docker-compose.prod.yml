@@ -8,7 +8,7 @@ services:
     ports:
       - "8081:8081"
     environment:
-      - SPRING_PROFILES_ACTIVE=prod
+      - SPRING_PROFILES_ACTIVE=dev
       # Chuỗi kết nối lấy từ Neon.tech hoặc Supabase
       - DB_URL=${DB_URL}
       - DB_USER=${DB_USER}
