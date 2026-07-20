@@ -1,0 +1,40 @@
+name: CD Pipeline (Deploy to EC2)
+
+on:
+  workflow_run:
+    workflows: ["CI Pipeline (Docker Build)"]
+    types:
+      - completed
+    branches:
+      - main
+      - master
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # Chỉ chạy deploy nếu CI pipeline thành công
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+
+    steps:
+      - name: Deploy to EC2 via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            echo "Starting deployment..."
+            
+            # Pull latest images from Docker Hub
+            docker pull hoangmelinh/elearning-backend:latest
+            docker pull hoangmelinh/elearning-frontend:latest
+            
+            # Di chuyển vào thư mục chứa project trên EC2 (bạn hãy sửa lại đường dẫn này nếu cần)
+            cd elearning
+            
+            # Restart các containers sử dụng docker-compose.prod.yml
+            # Đảm bảo file docker-compose.prod.yml và .env đã có sẵn trên server ở thư mục này
+            docker-compose -f docker-compose.prod.yml down
+            docker-compose -f docker-compose.prod.yml up -d
+            
+            echo "Deployment successful!"
