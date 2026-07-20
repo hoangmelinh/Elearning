@@ -63,9 +63,9 @@ jobs:
             # Di chuyển vào thư mục chứa project trên EC2 (bạn hãy sửa lại đường dẫn này nếu cần)
             cd elearning
             
-            # Restart các containers sử dụng docker-compose.prod.yml
-            # Đảm bảo file docker-compose.prod.yml và .env đã có sẵn trên server ở thư mục này
-            docker-compose -f docker-compose.prod.yml down
-            docker-compose -f docker-compose.prod.yml up -d
+            # Restart các containers sử dụng docker-compose.yml
+            # Đảm bảo file docker-compose.yml và .env đã có sẵn trên server ở thư mục này
+            docker-compose -f docker-compose.yml down
+            docker-compose -f docker-compose.yml up -d
             
             echo "Deployment successful!"
