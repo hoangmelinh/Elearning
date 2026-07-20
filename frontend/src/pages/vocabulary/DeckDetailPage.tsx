@@ -4,7 +4,7 @@ import httpClient from '../../services/httpClient';
 import {
   ArrowLeft, Cards, Trash, BookOpen,
   ArrowsLeftRight, PenNib, CircleNotch, Plus,
-  CaretLeft, CaretRight
+  CaretLeft, CaretRight, X, PencilSimple
 } from '@phosphor-icons/react';
 
 interface Flashcard {
@@ -29,6 +29,10 @@ const DeckDetailPage: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [activePracticeType, setActivePracticeType] = useState<'review' | 'match' | 'spelling' | null>(null);
   const [selectedLimit, setSelectedLimit] = useState<number | null>(null);
+  const [isWordModalOpen, setIsWordModalOpen] = useState(false);
+  const [editingCard, setEditingCard] = useState<Flashcard | null>(null);
+  const [wordForm, setWordForm] = useState({ term: '', phonetic: '', meaning_vi: '', example_sentence: '' });
+  const [isSavingWord, setIsSavingWord] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollStartRef = useRef<number>(0);
 
@@ -117,6 +121,53 @@ const DeckDetailPage: React.FC = () => {
     }
   };
 
+  const openWordModal = (card?: Flashcard) => {
+    if (card) {
+      setEditingCard(card);
+      setWordForm({
+        term: card.term,
+        phonetic: card.phonetic || '',
+        meaning_vi: card.meaning_vi,
+        example_sentence: card.example_sentence || ''
+      });
+    } else {
+      setEditingCard(null);
+      setWordForm({ term: '', phonetic: '', meaning_vi: '', example_sentence: '' });
+    }
+    setIsWordModalOpen(true);
+  };
+
+  const closeWordModal = () => {
+    setIsWordModalOpen(false);
+    setEditingCard(null);
+  };
+
+  const handleSaveCard = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!wordForm.term.trim() || !wordForm.meaning_vi.trim()) return;
+    
+    try {
+      setIsSavingWord(true);
+      if (editingCard) {
+        await httpClient.patch(`/flashcards/${editingCard.id}`, wordForm);
+        setCards(prev => prev.map(c => c.id === editingCard.id ? { ...c, ...wordForm } : c));
+      } else {
+        const response = await httpClient.post(`/decks/${deckId}/flashcards`, wordForm);
+        if (response.data?.data) {
+          setCards(prev => [response.data.data, ...prev]);
+        } else {
+          fetchCards(false);
+        }
+      }
+      closeWordModal();
+    } catch (error) {
+      console.error('Error saving card:', error);
+      alert('Có lỗi xảy ra khi lưu từ vựng.');
+    } finally {
+      setIsSavingWord(false);
+    }
+  };
+
   const totalPages = Math.ceil(cards.length / ITEMS_PER_PAGE);
   const paginatedCards = cards.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
@@ -155,32 +206,41 @@ const DeckDetailPage: React.FC = () => {
             <p className="text-gray-500 text-sm mt-1.5">{cards.length} thẻ từ đang hoạt động</p>
           </div>
 
-          {/* Premium Practice Quick Buttons */}
-          {cards.length > 0 && (
-            <div className="flex flex-wrap gap-2.5">
-              <button
-                onClick={() => setActivePracticeType('review')}
-                className="flex items-center gap-2 px-4.5 py-2.5 bg-emerald-500/[0.06] hover:bg-emerald-500/[0.12] border border-emerald-500/[0.15] text-emerald-400 rounded-full text-xs font-bold transition-all active:scale-[0.98]"
-              >
-                <BookOpen size={15} />
-                Học bài
-              </button>
-              <button
-                onClick={() => setActivePracticeType('match')}
-                className="flex items-center gap-2 px-4.5 py-2.5 bg-indigo-500/[0.06] hover:bg-indigo-500/[0.12] border border-indigo-500/[0.15] text-indigo-400 rounded-full text-xs font-bold transition-all active:scale-[0.98]"
-              >
-                <ArrowsLeftRight size={15} />
-                Nối từ
-              </button>
-              <button
-                onClick={() => setActivePracticeType('spelling')}
-                className="flex items-center gap-2 px-4.5 py-2.5 bg-amber-500/[0.06] hover:bg-amber-500/[0.12] border border-amber-500/[0.15] text-amber-400 rounded-full text-xs font-bold transition-all active:scale-[0.98]"
-              >
-                <PenNib size={15} />
-                Luyện viết
-              </button>
-            </div>
-          )}
+          {/* Actions */}
+          <div className="flex flex-wrap gap-2.5">
+            <button
+              onClick={() => openWordModal()}
+              className="flex items-center gap-2 px-4.5 py-2.5 bg-white text-black hover:bg-gray-200 rounded-full text-xs font-bold transition-all active:scale-[0.98]"
+            >
+              <Plus size={15} weight="bold" />
+              Thêm từ mới
+            </button>
+            {cards.length > 0 && (
+              <>
+                <button
+                  onClick={() => setActivePracticeType('review')}
+                  className="flex items-center gap-2 px-4.5 py-2.5 bg-emerald-500/[0.06] hover:bg-emerald-500/[0.12] border border-emerald-500/[0.15] text-emerald-400 rounded-full text-xs font-bold transition-all active:scale-[0.98]"
+                >
+                  <BookOpen size={15} />
+                  Học bài
+                </button>
+                <button
+                  onClick={() => setActivePracticeType('match')}
+                  className="flex items-center gap-2 px-4.5 py-2.5 bg-indigo-500/[0.06] hover:bg-indigo-500/[0.12] border border-indigo-500/[0.15] text-indigo-400 rounded-full text-xs font-bold transition-all active:scale-[0.98]"
+                >
+                  <ArrowsLeftRight size={15} />
+                  Nối từ
+                </button>
+                <button
+                  onClick={() => setActivePracticeType('spelling')}
+                  className="flex items-center gap-2 px-4.5 py-2.5 bg-amber-500/[0.06] hover:bg-amber-500/[0.12] border border-amber-500/[0.15] text-amber-400 rounded-full text-xs font-bold transition-all active:scale-[0.98]"
+                >
+                  <PenNib size={15} />
+                  Luyện viết
+                </button>
+              </>
+            )}
+          </div>
         </div>
 
         {/* Processing / Empty state with Double-Bezel and soft gradients */}
@@ -233,6 +293,13 @@ const DeckDetailPage: React.FC = () => {
                       <span>Import tài liệu mới</span>
                       <Plus size={14} weight="bold" />
                     </Link>
+                    <button
+                      onClick={() => openWordModal()}
+                      className="group flex items-center gap-2 bg-purple-500 hover:bg-purple-600 text-white px-5 py-2.5 rounded-full font-bold text-xs transition-all active:scale-[0.98]"
+                    >
+                      <span>Thêm từ thủ công</span>
+                      <Plus size={14} weight="bold" />
+                    </button>
                   </div>
                 </>
               )}
@@ -282,13 +349,22 @@ const DeckDetailPage: React.FC = () => {
                         AI
                       </span>
                     )}
-                    <button
-                      onClick={() => handleDeleteCard(card.id)}
-                      className="p-2 text-gray-600 hover:text-red-400 hover:bg-red-400/10 rounded-xl transition-all opacity-0 group-hover:opacity-100"
-                      title="Xóa từ này"
-                    >
-                      <Trash size={14} />
-                    </button>
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={() => openWordModal(card)}
+                        className="p-2 text-gray-500 hover:text-white hover:bg-white/10 rounded-xl transition-all"
+                        title="Sửa từ này"
+                      >
+                        <PencilSimple size={14} />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteCard(card.id)}
+                        className="p-2 text-gray-600 hover:text-red-400 hover:bg-red-400/10 rounded-xl transition-all"
+                        title="Xóa từ này"
+                      >
+                        <Trash size={14} />
+                      </button>
+                    </div>
                   </div>
 
                 </div>
@@ -422,6 +498,99 @@ const DeckDetailPage: React.FC = () => {
                   </div>
                 )}
 
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Word Form Modal */}
+        {isWordModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-[fadeIn_0.2s_ease-out]">
+            <div className="w-full max-w-lg rounded-[2rem] bg-white/[0.02] border border-white/[0.08] p-1.5 shadow-[0_24px_50px_rgba(0,0,0,0.6)]">
+              <div className="rounded-[calc(2rem-0.375rem)] bg-[#0a0a0a] p-6 relative">
+                <button
+                  onClick={closeWordModal}
+                  className="absolute top-6 right-6 text-gray-500 hover:text-white transition-colors"
+                >
+                  <X size={20} />
+                </button>
+                
+                <h3 className="text-xl font-bold text-white mb-6">
+                  {editingCard ? 'Sửa từ vựng' : 'Thêm từ mới'}
+                </h3>
+
+                <form onSubmit={handleSaveCard} className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Từ vựng *</label>
+                      <input
+                        type="text"
+                        required
+                        value={wordForm.term}
+                        onChange={e => setWordForm({...wordForm, term: e.target.value})}
+                        placeholder="e.g. ubiquitous"
+                        className="w-full px-4 py-3 bg-white/[0.03] border border-white/[0.06] rounded-xl text-white text-sm focus:outline-none focus:border-purple-500/50 transition-colors"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Phiên âm</label>
+                      <input
+                        type="text"
+                        value={wordForm.phonetic}
+                        onChange={e => setWordForm({...wordForm, phonetic: e.target.value})}
+                        placeholder="e.g. /juːˈbɪkwɪtəs/"
+                        className="w-full px-4 py-3 bg-white/[0.03] border border-white/[0.06] rounded-xl text-white text-sm focus:outline-none focus:border-purple-500/50 transition-colors"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Ý nghĩa *</label>
+                    <textarea
+                      required
+                      rows={2}
+                      value={wordForm.meaning_vi}
+                      onChange={e => setWordForm({...wordForm, meaning_vi: e.target.value})}
+                      placeholder="e.g. có mặt ở khắp mọi nơi"
+                      className="w-full px-4 py-3 bg-white/[0.03] border border-white/[0.06] rounded-xl text-white text-sm focus:outline-none focus:border-purple-500/50 transition-colors resize-none"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Ví dụ</label>
+                    <textarea
+                      rows={2}
+                      value={wordForm.example_sentence}
+                      onChange={e => setWordForm({...wordForm, example_sentence: e.target.value})}
+                      placeholder="e.g. Coffee shops are ubiquitous in this city."
+                      className="w-full px-4 py-3 bg-white/[0.03] border border-white/[0.06] rounded-xl text-white text-sm focus:outline-none focus:border-purple-500/50 transition-colors resize-none"
+                    />
+                  </div>
+
+                  <div className="pt-4 flex gap-3">
+                    <button
+                      type="button"
+                      onClick={closeWordModal}
+                      className="flex-1 py-3.5 bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.05] text-sm font-bold text-gray-300 hover:text-white rounded-xl transition-all"
+                    >
+                      Hủy bỏ
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSavingWord}
+                      className="flex-1 py-3.5 bg-purple-500 hover:bg-purple-600 text-sm font-bold text-white rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                      {isSavingWord ? (
+                        <>
+                          <CircleNotch size={16} className="animate-spin" />
+                          Đang lưu...
+                        </>
+                      ) : (
+                        editingCard ? 'Cập nhật' : 'Thêm mới'
+                      )}
+                    </button>
+                  </div>
+                </form>
               </div>
             </div>
           </div>
