@@ -39,6 +39,8 @@ app:
     region: ${AWS_REGION:us-east-1}
     s3:
       bucket: ${AWS_BUCKET:elearning-local}
+  cloudinary:
+    url: ${CLOUDINARY_URL:}
 
 nvidia:
   api:

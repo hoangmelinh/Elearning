@@ -9,4 +9,7 @@ public class WritingPromptRequest {
     private String promptText;
     private ContentLanguage language;
     private String level;
+    private com.elearning.writing.WritingTaskType taskType;
+    private String imageUrl;
+    private String aiReferenceData;
 }

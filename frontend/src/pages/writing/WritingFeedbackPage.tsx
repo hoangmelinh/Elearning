@@ -111,6 +111,40 @@ const WritingFeedbackPage: React.FC = () => {
                                 <p className="text-gray-300 leading-relaxed text-lg">{feedback.detailedFeedback.general_comment}</p>
                             </div>
 
+                            {submission.prompt.taskType === 'IELTS_TASK_1' && feedback.detailedFeedback.data_inaccuracies && (
+                                <div className="bg-[#0a0a0a] border border-white/5 rounded-3xl p-8 lg:p-10 relative overflow-hidden">
+                                    <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/10 rounded-bl-full blur-2xl pointer-events-none"></div>
+                                    <h2 className="text-2xl font-bold tracking-tighter mb-8 text-orange-400">Data Accuracy Analysis</h2>
+                                    {feedback.detailedFeedback.data_inaccuracies.length === 0 ? (
+                                        <p className="text-green-500 font-medium flex items-center gap-2">
+                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                                            Excellent! No data reporting errors were found.
+                                        </p>
+                                    ) : (
+                                        <div className="space-y-6 relative z-10">
+                                            {feedback.detailedFeedback.data_inaccuracies.map((err, i) => (
+                                                <div key={i} className="p-6 bg-[#111] border border-orange-500/20 rounded-2xl shadow-lg shadow-orange-500/5">
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
+                                                        <div className="bg-red-950/20 p-4 rounded-xl border border-red-500/20">
+                                                            <span className="text-[10px] font-bold tracking-widest uppercase text-red-400 mb-2 block">Student Wrote</span>
+                                                            <p className={`text-red-300 ${fontClass}`}>"{err.student_statement}"</p>
+                                                        </div>
+                                                        <div className="bg-green-950/20 p-4 rounded-xl border border-green-500/20">
+                                                            <span className="text-[10px] font-bold tracking-widest uppercase text-green-400 mb-2 block">Actual Data</span>
+                                                            <p className={`text-green-300 ${fontClass}`}>{err.actual_data}</p>
+                                                        </div>
+                                                    </div>
+                                                    <p className="text-gray-400 text-sm mt-4 pt-4 border-t border-white/5 bg-white/5 p-4 rounded-xl">
+                                                        <span className="font-bold text-orange-400 mr-2">Examiner Note:</span>
+                                                        {err.explanation}
+                                                    </p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
                             <div className="bg-[#0a0a0a] border border-white/5 rounded-3xl p-8 lg:p-10">
                                 <h2 className="text-2xl font-bold tracking-tighter mb-8 text-red-400">Grammar & Syntax</h2>
                                 {feedback.detailedFeedback.grammar_errors?.length === 0 ? (

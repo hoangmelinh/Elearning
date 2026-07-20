@@ -6,6 +6,9 @@ export interface WritingPrompt {
     promptText: string;
     language: 'en' | 'zh';
     level: string;
+    taskType: 'IELTS_TASK_1' | 'IELTS_TASK_2';
+    imageUrl?: string;
+    aiReferenceData?: string;
 }
 
 export interface WritingSubmission {
@@ -26,6 +29,7 @@ export interface WritingFeedback {
     detailedFeedback: {
         grammar_errors: { original: string; corrected: string; explanation: string; }[];
         vocabulary_suggestions: { original: string; suggestion: string; explanation: string; }[];
+        data_inaccuracies?: { student_statement: string; actual_data: string; explanation: string; }[];
         general_comment: string;
     };
 }
@@ -73,5 +77,16 @@ export const writingService = {
     getUserSubmissions: async (page = 0, size = 20) => {
         const response = await httpClient.get<{ data: { content: WritingSubmission[], totalElements: number } }>(`/writing/submissions?page=${page}&size=${size}`);
         return response.data.data;
+    },
+
+    uploadImage: async (file: File) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        const response = await httpClient.post<{ url: string }>('/upload/image', formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data'
+            }
+        });
+        return response.data.url;
     }
 };

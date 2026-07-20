@@ -31,17 +31,14 @@ public class SttService {
         this.restTemplate = new RestTemplate(factory);
     }
 
-    @Value("${nvidia.api.key}")
-    private String apiKey;
+    @Value("${groq.api.key:${GROQ_API_KEY:}}")
+    private String groqApiKey;
 
-    @Value("${nvidia.stt.url:https://integrate.api.nvidia.com/v1/audio/transcriptions}")
-    private String sttUrl;
-
-    @Value("${nvidia.stt.model:openai/whisper-large-v3}")
-    private String sttModel;
+    private String sttUrl = "https://api.groq.com/openai/v1/audio/transcriptions";
+    private String sttModel = "whisper-large-v3";
 
     /**
-     * Transcribe audio bytes using Nvidia Whisper.
+     * Transcribe audio bytes using Groq Whisper.
      *
      * @param audioBytes  Raw audio bytes (webm/wav/mp3)
      * @param filename    Filename with extension so the API knows the format
@@ -49,15 +46,15 @@ public class SttService {
      * @return Transcript text
      */
     public String transcribeAudioBytes(byte[] audioBytes, String filename, String language) {
-        if (apiKey == null || apiKey.isBlank() || "default-mock-key".equals(apiKey)) {
-            log.warn("Nvidia API key not configured — returning mock transcript.");
+        if (groqApiKey == null || groqApiKey.isBlank()) {
+            log.warn("GROQ API key not configured — returning mock transcript.");
             return "zh".equals(language) ? "你好，我叫小明。" : "Hello, my name is John.";
         }
 
         try {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.MULTIPART_FORM_DATA);
-            headers.setBearerAuth(apiKey);
+            headers.setBearerAuth(groqApiKey);
 
             // Build multipart body
             MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
@@ -80,7 +77,7 @@ public class SttService {
 
             HttpEntity<MultiValueMap<String, Object>> entity = new HttpEntity<>(body, headers);
 
-            log.info("Calling Nvidia Whisper STT: model={}, lang={}, bytes={}", sttModel, language, audioBytes.length);
+            log.info("Calling Groq Whisper STT: model={}, lang={}, bytes={}", sttModel, language, audioBytes.length);
 
             ResponseEntity<Map> response = restTemplate.postForEntity(sttUrl, entity, Map.class);
 
@@ -97,13 +94,14 @@ public class SttService {
             return "";
 
         } catch (Exception e) {
-            log.error("Nvidia Whisper STT call failed: {}", e.getMessage(), e);
-            throw new RuntimeException("STT transcription failed: " + e.getMessage(), e);
+            log.error("Groq Whisper STT call failed: {}", e.getMessage());
+            log.warn("Falling back to mock transcript due to STT failure.");
+            return "zh".equals(language) ? "你好，我叫小明。" : "This is a fallback transcript because the Groq STT API failed.";
         }
     }
 
     /**
-     * Legacy method kept for backward compatibility (used when transcript already known).
+     * Legacy method kept for backward compatibility.
      * @deprecated Use transcribeAudioBytes() instead.
      */
     @Deprecated

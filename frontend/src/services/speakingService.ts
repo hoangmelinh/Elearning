@@ -27,6 +27,12 @@ export interface Suggestion {
 }
 
 export interface AnalysisDto {
+    ieltsOverall?: number;
+    ieltsFluency?: number;
+    ieltsLexical?: number;
+    ieltsGrammar?: number;
+    ieltsPronunciation?: number;
+    detailedFeedback?: string;
     pronunciationScore: number;
     grammarErrors: GrammarError[];
     suggestions: Suggestion[];
@@ -85,16 +91,22 @@ export const speakingService = {
         return {
             id: data.id,
             language: data.language,
-            promptText: data.prompt_text,
-            audioUrl: data.audio_url,
-            transcriptText: data.transcript_text,
-            createdAt: data.created_at,
-            expiresAt: data.expires_at,
-            isDeleted: data.is_deleted,
-            analysisStatus: data.analysis_status || 'pending',
+            promptText: data.promptText || data.prompt_text,
+            audioUrl: data.audioUrl || data.audio_url,
+            transcriptText: data.transcriptText || data.transcript_text,
+            createdAt: data.createdAt || data.created_at,
+            expiresAt: data.expiresAt || data.expires_at,
+            isDeleted: data.isDeleted ?? data.is_deleted,
+            analysisStatus: data.analysisStatus || data.analysis_status || 'pending',
             analysis: data.analysis ? {
-                pronunciationScore: data.analysis.pronunciation_score,
-                grammarErrors: data.analysis.grammar_errors || [],
+                ieltsOverall: data.analysis.ieltsOverall,
+                ieltsFluency: data.analysis.ieltsFluency,
+                ieltsLexical: data.analysis.ieltsLexical,
+                ieltsGrammar: data.analysis.ieltsGrammar,
+                ieltsPronunciation: data.analysis.ieltsPronunciation,
+                detailedFeedback: data.analysis.detailedFeedback,
+                pronunciationScore: data.analysis.pronunciationScore,
+                grammarErrors: data.analysis.grammarErrors || [],
                 suggestions: data.analysis.suggestions || []
             } : undefined
         };
@@ -107,16 +119,22 @@ export const speakingService = {
             content: (data.content || []).map((recording: any) => ({
                 id: recording.id,
                 language: recording.language,
-                promptText: recording.prompt_text,
-                audioUrl: recording.audio_url,
-                transcriptText: recording.transcript_text,
-                createdAt: recording.created_at,
-                expiresAt: recording.expires_at,
-                isDeleted: recording.is_deleted,
-                analysisStatus: recording.analysis_status || 'pending',
+                promptText: recording.promptText || recording.prompt_text,
+                audioUrl: recording.audioUrl || recording.audio_url,
+                transcriptText: recording.transcriptText || recording.transcript_text,
+                createdAt: recording.createdAt || recording.created_at,
+                expiresAt: recording.expiresAt || recording.expires_at,
+                isDeleted: recording.isDeleted ?? recording.is_deleted,
+                analysisStatus: recording.analysisStatus || recording.analysis_status || 'pending',
                 analysis: recording.analysis ? {
-                    pronunciationScore: recording.analysis.pronunciation_score,
-                    grammarErrors: recording.analysis.grammar_errors || [],
+                    ieltsOverall: recording.analysis.ieltsOverall,
+                    ieltsFluency: recording.analysis.ieltsFluency,
+                    ieltsLexical: recording.analysis.ieltsLexical,
+                    ieltsGrammar: recording.analysis.ieltsGrammar,
+                    ieltsPronunciation: recording.analysis.ieltsPronunciation,
+                    detailedFeedback: recording.analysis.detailedFeedback,
+                    pronunciationScore: recording.analysis.pronunciationScore,
+                    grammarErrors: recording.analysis.grammarErrors || [],
                     suggestions: recording.analysis.suggestions || []
                 } : undefined
             })),

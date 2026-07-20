@@ -82,9 +82,6 @@ public class RecordingController {
 
         CompletableFuture.runAsync(() -> {
             try {
-                // Wait briefly to ensure the main thread has committed the transaction
-                Thread.sleep(500);
-
                 // Step 1: Whisper STT
                 recordingRepository.updateStatus(recordingId, "transcribing");
 
@@ -99,7 +96,13 @@ public class RecordingController {
                 var aiResult = speakingAnalysisService.analyzeSpeech(transcript, finalPromptText, language);
 
                 SpeakingAnalysis analysis = new SpeakingAnalysis();
-                analysis.setRecording(recordingRepository.getReferenceById(recordingId));
+                analysis.setRecording(recordingRepository.findById(recordingId).orElse(null));
+                analysis.setIeltsOverall(aiResult.getIeltsOverall());
+                analysis.setIeltsFluency(aiResult.getIeltsFluency());
+                analysis.setIeltsLexical(aiResult.getIeltsLexical());
+                analysis.setIeltsGrammar(aiResult.getIeltsGrammar());
+                analysis.setIeltsPronunciation(aiResult.getIeltsPronunciation());
+                analysis.setDetailedFeedback(aiResult.getDetailedFeedback());
                 analysis.setPronunciationScore(aiResult.getPronunciationScore());
                 analysis.setGrammarErrors(aiResult.getGrammarErrors());
                 analysis.setSuggestions(aiResult.getSuggestions());
@@ -111,9 +114,21 @@ public class RecordingController {
             } catch (Throwable e) {
                 log.error("[{}] Pipeline failed: {}", recordingId, e.getMessage(), e);
                 try {
+                    java.nio.file.Files.writeString(
+                        java.nio.file.Path.of("e:/website_elearning/backend/pipeline-debug.log"),
+                        "Error in pipeline: " + e.getMessage() + "\n" + java.util.Arrays.toString(e.getStackTrace())
+                    );
+                } catch (Exception ignored) {}
+                try {
                     recordingRepository.updateStatus(recordingId, "failed");
                 } catch (Exception ex) {
                     log.error("Failed to mark recording as failed: {}", ex.getMessage());
+                    try {
+                        java.nio.file.Files.writeString(
+                            java.nio.file.Path.of("e:/website_elearning/backend/pipeline-debug-2.log"),
+                            "Error updating status to failed: " + ex.getMessage() + "\n" + java.util.Arrays.toString(ex.getStackTrace())
+                        );
+                    } catch (Exception ignored) {}
                 }
             }
         });
@@ -151,6 +166,12 @@ public class RecordingController {
 
         analysisRepository.findByRecordingId(recording.getId()).ifPresent(analysis -> {
             builder.analysis(RecordingResponse.AnalysisDto.builder()
+                    .ieltsOverall(analysis.getIeltsOverall())
+                    .ieltsFluency(analysis.getIeltsFluency())
+                    .ieltsLexical(analysis.getIeltsLexical())
+                    .ieltsGrammar(analysis.getIeltsGrammar())
+                    .ieltsPronunciation(analysis.getIeltsPronunciation())
+                    .detailedFeedback(analysis.getDetailedFeedback())
                     .pronunciationScore(analysis.getPronunciationScore())
                     .grammarErrors(analysis.getGrammarErrors())
                     .suggestions(analysis.getSuggestions())
@@ -189,6 +210,12 @@ public class RecordingController {
 
             analysisRepository.findByRecordingId(recording.getId()).ifPresent(analysis -> {
                 builder.analysis(RecordingResponse.AnalysisDto.builder()
+                        .ieltsOverall(analysis.getIeltsOverall())
+                        .ieltsFluency(analysis.getIeltsFluency())
+                        .ieltsLexical(analysis.getIeltsLexical())
+                        .ieltsGrammar(analysis.getIeltsGrammar())
+                        .ieltsPronunciation(analysis.getIeltsPronunciation())
+                        .detailedFeedback(analysis.getDetailedFeedback())
                         .pronunciationScore(analysis.getPronunciationScore())
                         .grammarErrors(analysis.getGrammarErrors())
                         .suggestions(analysis.getSuggestions())

@@ -28,6 +28,12 @@ public class RecordingResponse {
     @Data
     @Builder
     public static class AnalysisDto {
+        private BigDecimal ieltsOverall;
+        private BigDecimal ieltsFluency;
+        private BigDecimal ieltsLexical;
+        private BigDecimal ieltsGrammar;
+        private BigDecimal ieltsPronunciation;
+        private String detailedFeedback;
         private BigDecimal pronunciationScore;
         private List<Map<String, Object>> grammarErrors;
         private List<Map<String, Object>> suggestions;

@@ -28,7 +28,10 @@ public class NvidiaAiClient {
     private String model;
 
     public NvidiaAiClient() {
-        this.restTemplate = new RestTemplate();
+        org.springframework.http.client.SimpleClientHttpRequestFactory factory = new org.springframework.http.client.SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(10_000); // 10 seconds
+        factory.setReadTimeout(60_000);    // 60 seconds
+        this.restTemplate = new RestTemplate(factory);
     }
 
     /**
@@ -62,7 +65,7 @@ public class NvidiaAiClient {
         messages.add(userMsg);
         
         requestBody.put("messages", messages);
-        requestBody.put("temperature", 0.2); // Low temperature for deterministic JSON output
+        requestBody.put("temperature", 0.0); // 0.0 for strict deterministic evaluation
         requestBody.put("max_tokens", 4096);
 
         HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);

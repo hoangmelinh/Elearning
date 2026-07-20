@@ -33,6 +33,16 @@ public class WritingPrompt {
     @Column(nullable = false)
     private ContentLanguage language;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "task_type")
+    private WritingTaskType taskType = WritingTaskType.IELTS_TASK_2;
+
+    @Column(name = "image_url")
+    private String imageUrl;
+
+    @Column(name = "ai_reference_data", columnDefinition = "TEXT")
+    private String aiReferenceData;
+
     @Column(length = 20)
     private String level; // "A1", "A2", "HSK1", etc.
 

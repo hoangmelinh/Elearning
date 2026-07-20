@@ -59,6 +59,12 @@ public class WritingController {
         prompt.setLanguage(request.getLanguage());
         prompt.setLevel(request.getLevel());
         
+        if (request.getTaskType() != null) {
+            prompt.setTaskType(request.getTaskType());
+        }
+        prompt.setImageUrl(request.getImageUrl());
+        prompt.setAiReferenceData(request.getAiReferenceData());
+        
         WritingPrompt saved = promptRepository.save(prompt);
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success("Prompt created", saved));
     }
@@ -75,6 +81,12 @@ public class WritingController {
         prompt.setPromptText(request.getPromptText());
         prompt.setLanguage(request.getLanguage());
         prompt.setLevel(request.getLevel());
+        
+        if (request.getTaskType() != null) {
+            prompt.setTaskType(request.getTaskType());
+        }
+        prompt.setImageUrl(request.getImageUrl());
+        prompt.setAiReferenceData(request.getAiReferenceData());
         
         WritingPrompt saved = promptRepository.save(prompt);
         return ResponseEntity.ok(ApiResponse.success("Prompt updated", saved));

@@ -28,6 +28,24 @@ public class SpeakingAnalysis {
     @Column(name = "pronunciation_score", precision = 5, scale = 2)
     private BigDecimal pronunciationScore;
 
+    @Column(name = "ielts_overall", precision = 3, scale = 1)
+    private BigDecimal ieltsOverall;
+
+    @Column(name = "ielts_fluency", precision = 3, scale = 1)
+    private BigDecimal ieltsFluency;
+
+    @Column(name = "ielts_lexical", precision = 3, scale = 1)
+    private BigDecimal ieltsLexical;
+
+    @Column(name = "ielts_grammar", precision = 3, scale = 1)
+    private BigDecimal ieltsGrammar;
+
+    @Column(name = "ielts_pronunciation", precision = 3, scale = 1)
+    private BigDecimal ieltsPronunciation;
+
+    @Column(name = "detailed_feedback", columnDefinition = "TEXT")
+    private String detailedFeedback;
+
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "grammar_errors", columnDefinition = "jsonb")
     private List<Map<String, Object>> grammarErrors;

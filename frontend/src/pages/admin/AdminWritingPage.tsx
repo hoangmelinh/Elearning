@@ -9,12 +9,16 @@ const AdminWritingPage: React.FC = () => {
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
+    const [uploadingImage, setUploadingImage] = useState(false);
 
     const [formData, setFormData] = useState({
         title: '',
         language: 'en' as 'en' | 'zh',
         level: 'IELTS',
-        promptText: ''
+        taskType: 'IELTS_TASK_2' as 'IELTS_TASK_1' | 'IELTS_TASK_2',
+        imageUrl: '',
+        promptText: '',
+        aiReferenceData: ''
     });
 
     useEffect(() => {
@@ -50,7 +54,10 @@ const AdminWritingPage: React.FC = () => {
             title: prompt.title,
             language: prompt.language,
             level: prompt.level,
-            promptText: prompt.promptText
+            taskType: prompt.taskType || 'IELTS_TASK_2',
+            imageUrl: prompt.imageUrl || '',
+            promptText: prompt.promptText,
+            aiReferenceData: prompt.aiReferenceData || ''
         });
         setIsFormOpen(true);
     };
@@ -61,7 +68,10 @@ const AdminWritingPage: React.FC = () => {
             title: '',
             language: 'en',
             level: 'IELTS',
-            promptText: ''
+            taskType: 'IELTS_TASK_2',
+            imageUrl: '',
+            promptText: '',
+            aiReferenceData: ''
         });
         setIsFormOpen(true);
     };
@@ -82,6 +92,24 @@ const AdminWritingPage: React.FC = () => {
             alert('Có lỗi xảy ra khi lưu đề bài');
         } finally {
             setSubmitting(false);
+        }
+    };
+
+    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        try {
+            setUploadingImage(true);
+            const url = await writingService.uploadImage(file);
+            setFormData(prev => ({ ...prev, imageUrl: url }));
+        } catch (err) {
+            console.error('Image upload failed', err);
+            alert('Upload ảnh thất bại. Vui lòng thử lại.');
+        } finally {
+            setUploadingImage(false);
+            // Reset input
+            e.target.value = '';
         }
     };
 
@@ -182,14 +210,85 @@ const AdminWritingPage: React.FC = () => {
                                     />
                                 </div>
                             </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-bold text-gray-400 mb-2">Loại bài (Task Type)</label>
+                                    <select
+                                        className="w-full bg-[#0a0a0a] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-indigo-500 transition-colors"
+                                        value={formData.taskType}
+                                        onChange={e => setFormData({ ...formData, taskType: e.target.value as any })}
+                                    >
+                                        <option value="IELTS_TASK_1">Task 1</option>
+                                        <option value="IELTS_TASK_2">Task 2</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-bold text-gray-400 mb-2">Ảnh Biểu Đồ (Cho Task 1)</label>
+                                    <div className="flex flex-col gap-3">
+                                        <div className="flex gap-2">
+                                            <input
+                                                type="text"
+                                                placeholder="URL hoặc tải ảnh lên"
+                                                className="flex-1 min-w-0 bg-[#0a0a0a] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-indigo-500 transition-colors"
+                                                value={formData.imageUrl}
+                                                onChange={e => setFormData({ ...formData, imageUrl: e.target.value })}
+                                            />
+                                            <label className="cursor-pointer shrink-0 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl px-4 py-3 flex items-center justify-center transition-colors">
+                                                <input 
+                                                    type="file" 
+                                                    className="hidden" 
+                                                    accept="image/*"
+                                                    onChange={handleImageUpload}
+                                                    disabled={uploadingImage}
+                                                />
+                                                {uploadingImage ? (
+                                                    <div className="w-5 h-5 border-2 border-gray-400 border-t-indigo-500 rounded-full animate-spin"></div>
+                                                ) : (
+                                                    <span className="text-gray-300 font-bold whitespace-nowrap">Tải ảnh</span>
+                                                )}
+                                            </label>
+                                        </div>
+                                        {formData.imageUrl && (
+                                            <div className="relative group rounded-xl overflow-hidden border border-white/10 bg-[#0a0a0a] flex items-center justify-center h-32">
+                                                <img src={formData.imageUrl} alt="Preview" className="max-h-full object-contain" />
+                                                <button 
+                                                    type="button"
+                                                    onClick={() => setFormData({ ...formData, imageUrl: '' })}
+                                                    className="absolute top-2 right-2 p-1.5 bg-black/60 hover:bg-red-500/80 rounded-lg text-white opacity-0 group-hover:opacity-100 transition-all"
+                                                >
+                                                    <X size={16} weight="bold" />
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
                             <div>
-                                <label className="block text-sm font-bold text-gray-400 mb-2">Nội dung đề (Prompt Text)</label>
+                                <label className="block text-sm font-bold text-gray-400 mb-2">
+                                    Nội dung đề cho Học sinh (Prompt Text)
+                                </label>
                                 <textarea
                                     required
-                                    rows={8}
+                                    rows={6}
+                                    placeholder="Ví dụ: The chart below shows the proportion of the population..."
                                     className="w-full bg-[#0a0a0a] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-indigo-500 transition-colors resize-none"
                                     value={formData.promptText}
                                     onChange={e => setFormData({ ...formData, promptText: e.target.value })}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-bold text-gray-400 mb-2">
+                                    Dữ liệu ẩn cho AI chấm (AI Reference Data)
+                                    <span className="block text-xs font-normal text-gray-500 mt-1">
+                                        Mẹo (Task 1): Nếu biểu đồ phức tạp, hãy tóm tắt các con số quan trọng vào đây. Học sinh sẽ không nhìn thấy ô này, nhưng AI sẽ lấy số liệu ở đây để so sánh và bắt lỗi học sinh.
+                                    </span>
+                                </label>
+                                <textarea
+                                    rows={4}
+                                    placeholder="Ví dụ: Năm 2000 USA 50%, UK 30%. Dân số già tăng nhanh nhất ở Nhật..."
+                                    className="w-full bg-indigo-950/20 border border-indigo-500/30 rounded-xl px-4 py-3 text-indigo-100 placeholder-indigo-900/50 focus:outline-none focus:border-indigo-500 transition-colors resize-none"
+                                    value={formData.aiReferenceData}
+                                    onChange={e => setFormData({ ...formData, aiReferenceData: e.target.value })}
                                 />
                             </div>
                         </form>

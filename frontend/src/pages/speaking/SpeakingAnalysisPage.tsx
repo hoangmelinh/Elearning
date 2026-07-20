@@ -1,31 +1,32 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { speakingService } from '../../services/speakingService';
-import type { RecordingResponse } from '../../services/speakingService';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import { speakingService, RecordingResponse } from '../../services/speakingService';
 import {
-    ArrowLeft, CheckCircle, WarningCircle, Lightbulb,
-    MicrophoneSlash, Spinner
+    ArrowLeft, CheckCircle, WarningCircle, Microphone,
+    Spinner, CaretDown, Lightbulb
 } from '@phosphor-icons/react';
 
 const ScoreRing: React.FC<{ score: number }> = ({ score }) => {
-    const clampedScore = Math.max(0, Math.min(100, score));
-    const circumference = 2 * Math.PI * 44;
-    const dashOffset = circumference - (clampedScore / 100) * circumference;
+    // Score is out of 9.0
+    const clampedScore = Math.max(0, Math.min(9, score));
+    const percentage = (clampedScore / 9) * 100;
+    const circumference = 2 * Math.PI * 34; // r=34
+    const dashOffset = circumference - (percentage / 100) * circumference;
 
-    const color = clampedScore >= 80
-        ? '#10b981'   // emerald
-        : clampedScore >= 60
-        ? '#f59e0b'   // amber
+    const color = clampedScore >= 7.0
+        ? '#10b981'   // green
+        : clampedScore >= 5.5
+        ? '#f59e0b'   // yellow
         : '#ef4444';  // red
 
     return (
-        <div className="relative w-36 h-36 flex items-center justify-center">
+        <div className="relative w-24 h-24 flex items-center justify-center">
             <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
-                <circle cx="50" cy="50" r="44" fill="none" stroke="rgba(255,255,255,0.04)" strokeWidth="4" />
+                <circle cx="50" cy="50" r="34" fill="none" stroke="#e5e7eb" strokeWidth="6" />
                 <circle
-                    cx="50" cy="50" r="44" fill="none"
+                    cx="50" cy="50" r="34" fill="none"
                     stroke={color}
-                    strokeWidth="4"
+                    strokeWidth="6"
                     strokeDasharray={circumference}
                     strokeDashoffset={dashOffset}
                     strokeLinecap="round"
@@ -33,8 +34,7 @@ const ScoreRing: React.FC<{ score: number }> = ({ score }) => {
                 />
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-3xl font-extrabold text-white">{Math.round(clampedScore)}</span>
-                <span className="text-[10px] text-gray-500 uppercase tracking-wider">/100</span>
+                <span className="text-2xl font-bold text-gray-800">{score.toFixed(1)}</span>
             </div>
         </div>
     );
@@ -42,9 +42,11 @@ const ScoreRing: React.FC<{ score: number }> = ({ score }) => {
 
 const SpeakingAnalysisPage: React.FC = () => {
     const { id } = useParams<{ id: string }>();
+    const navigate = useNavigate();
     const [recording, setRecording] = useState<RecordingResponse | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const [showPrompt, setShowPrompt] = useState(true);
 
     useEffect(() => {
         if (!id) return;
@@ -59,12 +61,10 @@ const SpeakingAnalysisPage: React.FC = () => {
 
                 setRecording(data);
 
-                // Stop polling when completed or failed
                 if (data.analysisStatus === 'completed' || data.analysisStatus === 'failed') {
                     setLoading(false);
                 } else {
-                    // Still processing — poll every 3 seconds
-                    pollTimer = setTimeout(fetchRecording, 3000);
+                    pollTimer = setTimeout(fetchRecording, 2000);
                 }
             } catch (err: any) {
                 if (!cancelled) {
@@ -81,105 +81,21 @@ const SpeakingAnalysisPage: React.FC = () => {
         };
     }, [id]);
 
-    // ── Step-by-step progress indicator ──────────────────────────
-    const STEPS: { key: RecordingResponse['analysisStatus']; label: string; sublabel: string }[] = [
-        { key: 'pending',      label: 'Đang chuẩn bị',      sublabel: 'Nhận file âm thanh từ trình duyệt...' },
-        { key: 'transcribing', label: 'Nvidia Whisper STT',  sublabel: 'Chuyển giọng nói thành văn bản... (10–30s)' },
-        { key: 'analyzing',    label: 'AI phân tích',        sublabel: 'Llama đang chấm điểm phát âm & ngữ pháp...' },
-        { key: 'completed',    label: 'Hoàn tất',            sublabel: '' },
-    ];
-
-    const stepOrder = ['pending', 'transcribing', 'analyzing', 'completed'];
-    const currentStepIndex = recording
-        ? stepOrder.indexOf(recording.analysisStatus)
-        : 0;
-
     if (loading || (recording && recording.analysisStatus !== 'completed' && recording.analysisStatus !== 'failed')) {
         return (
-            <div className="min-h-screen bg-transparent flex flex-col items-center justify-center gap-8 relative z-10 px-6">
-                <div>
-                    <div className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.2em] font-semibold bg-white/[0.04] border border-white/[0.05] text-gray-400 mb-4">
-                        Đang xử lý
-                    </div>
-                    <h2 className="text-2xl font-extrabold text-white text-center mb-2">Phân tích giọng nói</h2>
-                    <p className="text-gray-500 text-sm text-center">Trang này tự động cập nhật mỗi 3 giây</p>
-                </div>
-
-                {/* Step list */}
-                <div className="w-full max-w-sm space-y-2">
-                    {STEPS.filter(s => s.key !== 'completed').map((step, i) => {
-                        const isDone = currentStepIndex > i;
-                        const isActive = currentStepIndex === i;
-                        return (
-                            <div key={step.key} className={`flex items-start gap-4 p-4 rounded-2xl border transition-all duration-500 ${
-                                isActive
-                                    ? 'bg-indigo-500/[0.06] border-indigo-500/30'
-                                    : isDone
-                                    ? 'bg-emerald-500/[0.04] border-emerald-500/20 opacity-60'
-                                    : 'bg-white/[0.015] border-white/[0.05] opacity-30'
-                            }`}>
-                                <div className="flex-shrink-0 mt-0.5">
-                                    {isDone ? (
-                                        <CheckCircle size={18} className="text-emerald-400" weight="fill" />
-                                    ) : isActive ? (
-                                        <div className="w-[18px] h-[18px] rounded-full border-2 border-t-indigo-400 border-white/10 animate-spin" />
-                                    ) : (
-                                        <div className="w-[18px] h-[18px] rounded-full border-2 border-white/10" />
-                                    )}
-                                </div>
-                                <div>
-                                    <p className={`text-sm font-semibold ${isActive ? 'text-white' : isDone ? 'text-emerald-400' : 'text-gray-600'}`}>
-                                        {step.label}
-                                    </p>
-                                    {isActive && step.sublabel && (
-                                        <p className="text-xs text-indigo-300/70 mt-0.5">{step.sublabel}</p>
-                                    )}
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
-
-                {/* Show transcript as soon as it's ready */}
-                {recording?.transcriptText && (
-                    <div className="w-full max-w-sm rounded-2xl bg-white/[0.015] border border-white/[0.05] p-4">
-                        <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2">Transcript đã nhận dạng</p>
-                        <p className="text-gray-300 text-sm leading-relaxed font-mono">{recording.transcriptText}</p>
-                    </div>
-                )}
+            <div className="min-h-screen bg-[#fafaf9] flex flex-col items-center justify-center gap-6">
+                <Spinner size={48} className="text-[#4c7c25] animate-spin" />
+                <h2 className="text-xl font-bold text-gray-800">Đang phân tích bài nói...</h2>
+                <p className="text-gray-500 text-sm">AI đang chấm điểm chi tiết theo tiêu chí IELTS. Vui lòng đợi.</p>
             </div>
         );
     }
 
     if (error || !recording) {
         return (
-            <div className="min-h-screen bg-transparent flex flex-col items-center justify-center relative z-10 px-6">
-                <div className="flex items-center gap-3 p-5 rounded-2xl bg-red-500/[0.05] border border-red-500/20 text-red-400 text-sm max-w-md">
-                    <WarningCircle size={20} className="flex-shrink-0" />
-                    {error || 'Không tìm thấy bản ghi.'}
-                </div>
-                <Link to="/speaking" className="mt-6 text-gray-500 hover:text-white text-sm transition-colors">
-                    ← Quay lại trang luyện nói
-                </Link>
-            </div>
-        );
-    }
-
-    if (recording.isDeleted) {
-        return (
-            <div className="min-h-screen bg-transparent flex flex-col items-center justify-center relative z-10 px-6">
-                <div className="max-w-md w-full text-center">
-                    <MicrophoneSlash size={48} className="text-gray-600 mx-auto mb-4" />
-                    <h2 className="text-xl font-bold text-white mb-2">File âm thanh đã hết hạn</h2>
-                    <p className="text-gray-500 text-sm mb-6">File ghi âm tự động xoá sau 15 ngày để bảo vệ bộ nhớ.</p>
-                    {recording.analysis && (
-                        <div className="rounded-2xl bg-white/[0.02] border border-white/[0.05] p-5 text-left">
-                            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Lịch sử phân tích</p>
-                            <ScoreRing score={recording.analysis.pronunciationScore} />
-                            <p className="text-gray-400 text-sm mt-4 italic">"{recording.transcriptText}"</p>
-                        </div>
-                    )}
-                </div>
+            <div className="min-h-screen bg-[#fafaf9] flex flex-col items-center justify-center">
+                <div className="text-red-500">{error || 'Không tìm thấy bản ghi.'}</div>
+                <Link to="/speaking" className="mt-4 text-blue-500 hover:underline">Quay lại</Link>
             </div>
         );
     }
@@ -187,115 +103,137 @@ const SpeakingAnalysisPage: React.FC = () => {
     const { analysis } = recording;
 
     return (
-        <div className="min-h-screen bg-transparent text-[#f5f5f5] pb-24 relative z-10">
-            <div className="max-w-3xl mx-auto px-6 pt-12">
-
-                {/* Back header */}
-                <div className="mb-8">
-                    <Link
-                        to="/speaking"
-                        className="inline-flex items-center gap-2 text-gray-500 hover:text-white transition-colors text-xs font-semibold uppercase tracking-wider"
-                    >
-                        <ArrowLeft size={14} />
-                        Quay lại
-                    </Link>
-                </div>
-
-                <div className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.2em] font-semibold bg-white/[0.04] border border-white/[0.05] text-gray-400 mb-3">
-                    Kết quả phân tích
-                </div>
-                <h1 className="text-3xl font-extrabold tracking-tight text-white mb-8">AI Speaking Analysis</h1>
-
-                {/* Score + transcript */}
-                <div className="rounded-[2rem] bg-white/[0.015] border border-white/[0.05] p-2 mb-6">
-                    <div className="rounded-[calc(2rem-0.5rem)] bg-[#0a0a0a] border border-white/[0.02] p-6">
-                        <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6">
-                            {analysis ? (
-                                <div className="flex flex-col items-center gap-2 flex-shrink-0">
-                                    <ScoreRing score={analysis.pronunciationScore} />
-                                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Điểm phát âm</span>
-                                </div>
-                            ) : (
-                                <div className="flex flex-col items-center gap-2 flex-shrink-0">
-                                    <div className="w-36 h-36 rounded-full bg-white/[0.02] border border-white/[0.05] flex items-center justify-center">
-                                        <Spinner size={32} className="text-gray-600 animate-spin" />
-                                    </div>
-                                    <span className="text-[10px] text-gray-600 uppercase tracking-wider">Đang phân tích...</span>
-                                </div>
-                            )}
-                            <div className="flex-1 min-w-0">
-                                <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-3">Transcript</p>
-                                {recording.transcriptText ? (
-                                    <p className="text-white/90 text-sm leading-relaxed font-mono bg-white/[0.02] border border-white/[0.04] rounded-xl p-4">
-                                        {recording.transcriptText}
-                                    </p>
-                                ) : (
-                                    <p className="text-gray-700 text-sm italic">Nvidia Whisper đang transcribe...</p>
-                                )}
+        <div className="min-h-screen bg-[#fcfcfc] text-gray-800 font-sans">
+            {/* Header */}
+            <header className="flex items-center justify-between px-6 py-4 bg-white border-b border-gray-100 shadow-sm">
+                <div className="flex items-center gap-4">
+                    <button onClick={() => navigate('/speaking')} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+                        <ArrowLeft size={20} className="text-gray-600" />
+                    </button>
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-[#4c7c25] text-white flex items-center justify-center">
+                            <Microphone size={20} weight="fill" />
+                        </div>
+                        <div>
+                            <h1 className="font-bold text-base tracking-wide text-gray-900 uppercase">IELTS MOCK INTERVIEW</h1>
+                            <div className="flex items-center gap-1.5 text-xs font-semibold text-[#4c7c25]">
+                                <div className="w-1.5 h-1.5 rounded-full bg-[#4c7c25]" />
+                                GIÁM KHẢO IELTS (BAND 9.0) ONLINE
                             </div>
                         </div>
                     </div>
                 </div>
+                <div className="flex items-center gap-3">
+                    <button className="px-5 py-2 text-sm font-semibold border border-gray-200 rounded-full hover:bg-gray-50 transition-colors">
+                        Giọng giám khảo: British (Anh-Anh) <CaretDown className="inline ml-1" />
+                    </button>
+                    <button onClick={() => navigate('/speaking')} className="px-5 py-2 text-sm font-semibold text-red-500 border border-red-200 rounded-full hover:bg-red-50 transition-colors">
+                        Kết thúc
+                    </button>
+                </div>
+            </header>
 
-                {analysis && (
-                    <>
-                        {/* Grammar errors */}
-                        <div className="rounded-[2rem] bg-white/[0.015] border border-white/[0.05] p-2 mb-6">
-                            <div className="rounded-[calc(2rem-0.5rem)] bg-[#0a0a0a] border border-white/[0.02] p-6">
-                                <div className="flex items-center gap-2 mb-5">
-                                    <WarningCircle size={16} className="text-red-400" weight="fill" />
-                                    <h2 className="text-sm font-bold text-white">Lỗi ngữ pháp &amp; Giọng điệu</h2>
+            <main className="max-w-4xl mx-auto px-6 py-12 relative">
+                {/* Background pattern */}
+                <div className="absolute inset-0 pointer-events-none opacity-5" style={{ backgroundImage: 'radial-gradient(#4c7c25 1px, transparent 1px)', backgroundSize: '30px 30px' }} />
+                
+                <div className="relative z-10 flex flex-col gap-10">
+                    
+                    {/* Prompt Box */}
+                    {recording.promptText && (
+                        <div className="w-full max-w-2xl mx-auto">
+                            <div 
+                                className="bg-[#fcf8e3] border-2 border-black rounded-[20px] p-4 cursor-pointer shadow-[4px_4px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_rgba(0,0,0,1)] transition-all flex justify-between items-center"
+                                onClick={() => setShowPrompt(!showPrompt)}
+                            >
+                                <div className="flex items-center gap-2 font-bold text-gray-800">
+                                    <Lightbulb weight="fill" className="text-yellow-500" />
+                                    Gợi ý tham khảo
+                                </div>
+                                <CaretDown className={`transition-transform ${showPrompt ? 'rotate-180' : ''}`} />
+                            </div>
+                            {showPrompt && (
+                                <div className="mt-4 p-5 bg-white border border-gray-200 rounded-2xl shadow-sm text-gray-700 leading-relaxed">
+                                    {recording.promptText}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* User Speech Bubble */}
+                    <div className="flex justify-end w-full max-w-3xl mx-auto">
+                        <div className="bg-[#4c7c25] text-white p-5 rounded-3xl rounded-tr-sm shadow-md max-w-lg">
+                            <div className="text-[10px] font-bold uppercase tracking-wider text-green-200 mb-2 opacity-80">Bài nói của bạn</div>
+                            <p className="text-lg font-medium leading-relaxed">
+                                {recording.transcriptText || "Không có dữ liệu văn bản."}
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Record Again Button */}
+                    <div className="flex flex-col items-center justify-center my-8">
+                        <button 
+                            onClick={() => navigate('/speaking/record')}
+                            className="w-16 h-16 bg-[#fbbf24] hover:bg-[#f59e0b] text-black rounded-full flex items-center justify-center shadow-lg transform transition-transform hover:scale-105 mb-3"
+                        >
+                            <Microphone size={28} weight="fill" />
+                        </button>
+                        <span className="font-bold text-gray-800 text-sm tracking-widest uppercase">GHI ÂM LẠI</span>
+                        <span className="text-xs text-gray-500 mt-1">Hệ thống sẽ tự động chấm điểm lại</span>
+                    </div>
+
+                    {/* Score Card */}
+                    {analysis && (
+                        <div className="w-full max-w-3xl mx-auto bg-[#f0fdf4] border-2 border-black rounded-2xl p-6 shadow-[6px_6px_0px_rgba(0,0,0,1)]">
+                            <div className="flex flex-col md:flex-row gap-8 items-center">
+                                {/* Left: Circle and Badges */}
+                                <div className="flex flex-col items-center flex-shrink-0">
+                                    <ScoreRing score={analysis.ieltsOverall || analysis.pronunciationScore / 10} />
+                                    <div className="flex gap-2 mt-4">
+                                        <div className="px-2 py-1 text-xs font-bold border border-green-500 text-green-700 rounded bg-white">FC {analysis.ieltsFluency || '-'}</div>
+                                        <div className="px-2 py-1 text-xs font-bold border border-blue-500 text-blue-700 rounded bg-white">LR {analysis.ieltsLexical || '-'}</div>
+                                        <div className="px-2 py-1 text-xs font-bold border border-purple-500 text-purple-700 rounded bg-white">GRA {analysis.ieltsGrammar || '-'}</div>
+                                        <div className="px-2 py-1 text-xs font-bold border border-red-400 text-red-600 rounded bg-white">P {analysis.ieltsPronunciation || '-'}</div>
+                                    </div>
                                 </div>
 
-                                {analysis.grammarErrors.length === 0 ? (
-                                    <div className="flex items-center gap-3 text-emerald-400 text-sm">
-                                        <CheckCircle size={18} weight="fill" />
-                                        <span>Hoàn hảo! Không phát hiện lỗi ngữ pháp.</span>
+                                {/* Right: Feedback */}
+                                <div className="flex-1 space-y-4 w-full">
+                                    <div className="p-4 bg-green-50 border border-green-200 rounded-xl flex items-start gap-3">
+                                        <CheckCircle size={20} className="text-green-600 flex-shrink-0 mt-0.5" weight="fill" />
+                                        <p className="text-green-800 font-medium text-sm">
+                                            {analysis.detailedFeedback || 'Bài nói của bạn khá tốt và đáp ứng được các yêu cầu cơ bản.'}
+                                        </p>
                                     </div>
-                                ) : (
-                                    <ul className="space-y-3">
-                                        {analysis.grammarErrors.map((err: any, idx: number) => (
-                                            <li key={idx} className="rounded-xl bg-red-500/[0.04] border border-red-500/[0.12] p-4">
-                                                <div className="flex flex-wrap items-center gap-2 mb-2">
-                                                    <span className="line-through text-red-400 font-medium font-mono text-sm">{err.original}</span>
-                                                    <span className="text-gray-500">→</span>
-                                                    <span className="text-emerald-400 font-bold font-mono text-sm">{err.corrected}</span>
-                                                    <span className="ml-auto text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20">
-                                                        {err.error_type}
-                                                    </span>
-                                                </div>
-                                                <p className="text-gray-400 text-xs leading-relaxed">{err.explanation}</p>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                )}
+                                    
+                                    {/* Additional detailed corrections if any */}
+                                    {analysis.grammarErrors && analysis.grammarErrors.length > 0 && (
+                                        <div className="p-4 bg-white border border-gray-200 rounded-xl">
+                                            <p className="text-sm text-gray-700">
+                                                Câu trả lời của bạn rõ ràng, tuy nhiên có một vài lỗi cần lưu ý:
+                                            </p>
+                                            <ul className="mt-2 space-y-2">
+                                                {analysis.grammarErrors.map((err, idx) => (
+                                                    <li key={idx} className="text-sm">
+                                                        <span className="line-through text-red-500 mr-2">{err.original}</span>
+                                                        <span className="text-green-600 font-semibold">→ {err.corrected}</span>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
+                    )}
+                </div>
 
-                        {/* Suggestions */}
-                        {analysis.suggestions.length > 0 && (
-                            <div className="rounded-[2rem] bg-white/[0.015] border border-white/[0.05] p-2">
-                                <div className="rounded-[calc(2rem-0.5rem)] bg-[#0a0a0a] border border-white/[0.02] p-6">
-                                    <div className="flex items-center gap-2 mb-5">
-                                        <Lightbulb size={16} className="text-amber-400" weight="fill" />
-                                        <h2 className="text-sm font-bold text-white">Gợi ý cải thiện</h2>
-                                    </div>
-                                    <ul className="space-y-3">
-                                        {analysis.suggestions.map((s: any, idx: number) => (
-                                            <li key={idx} className="flex gap-3 text-sm text-gray-400">
-                                                <span className="w-1.5 h-1.5 rounded-full bg-amber-400/60 flex-shrink-0 mt-2" />
-                                                <span>
-                                                    <strong className="text-gray-300 capitalize">{s.type}:</strong> {s.text}
-                                                </span>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                </div>
-                            </div>
-                        )}
-                    </>
-                )}
-            </div>
+                <div className="mt-12 text-right">
+                    <button className="px-6 py-3 bg-[#4c7c25] hover:bg-[#3f661f] text-white font-bold rounded-xl shadow-md transition-colors">
+                        Câu tiếp →
+                    </button>
+                </div>
+            </main>
         </div>
     );
 };
