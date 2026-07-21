@@ -52,23 +52,12 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        
-        // 1. Danh sách Domain được phép truy cập (Giữ nguyên các domain của bạn)
-        configuration.setAllowedOrigins(List.of(
-            "http://localhost:5173", 
-            "http://localhost:3000",
-            "http://learningenglish.id.vn",
-            "https://learningenglish.id.vn",
-            "http://www.learningenglish.id.vn",
-            "https://www.learningenglish.id.vn"
-        ));
+    
+        configuration.setAllowedOriginPatterns(List.of("*"));
         
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-   
         configuration.setAllowedHeaders(List.of("*"));
-
-        configuration.setExposedHeaders(List.of("Authorization", "Content-Type"));
-        
+        configuration.setExposedHeaders(List.of("*"));
         configuration.setAllowCredentials(true);
         
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
