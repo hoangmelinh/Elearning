@@ -29,6 +29,7 @@ services:
       - AWS_REGION=us-east-1
       - AWS_BUCKET=elearning-local
       - JWT_SECRET=test_secret_for_development_purposes_only_change_in_prod_12345678901234567890
+      - CLOUDINARY_URL=${CLOUDINARY_URL}
     depends_on:
       - db
 

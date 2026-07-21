@@ -45,6 +45,12 @@ const FlashcardReviewPage: React.FC = () => {
     const currentCard = cards[currentIndex];
     try {
       await httpClient.patch(`/flashcards/${currentCard.id}/progress`, { status });
+      
+      // If the user hasn't mastered the word, append it to the end of the deck
+      if (status === 'learning') {
+        setCards(prev => [...prev, prev[currentIndex]]);
+      }
+      
       handleNext();
     } catch (error) {
       console.error(error);
@@ -53,12 +59,7 @@ const FlashcardReviewPage: React.FC = () => {
 
   const handleNext = () => {
     setIsFlipped(false);
-    if (currentIndex < cards.length - 1) {
-      setCurrentIndex(prev => prev + 1);
-    } else {
-      // Finished all cards in review
-      setCurrentIndex(cards.length);
-    }
+    setCurrentIndex(prev => prev + 1);
   };
 
   const handleReset = () => {
@@ -153,26 +154,26 @@ const FlashcardReviewPage: React.FC = () => {
                   
                   {/* Front Side Card (English Term) */}
                   <div className="card-3d-front bg-[#0a0a0a] border border-white/[0.03] flex flex-col items-center justify-center text-center">
-                    <span className="text-[10px] font-bold tracking-[0.2em] text-gray-600 uppercase mb-6">Mặt trước (Gợi ý)</span>
-                    <h2 className="text-3xl font-extrabold text-white tracking-tight">{card.term}</h2>
+                    <span className="text-[11px] font-bold tracking-[0.2em] text-gray-400 uppercase mb-6">Mặt trước (Gợi ý)</span>
+                    <h2 className="text-4xl font-extrabold text-white tracking-tight">{card.term}</h2>
                     {card.phonetic && (
-                      <p className="text-sm text-gray-500 font-mono mt-3 bg-white/[0.03] px-3 py-1 rounded-full border border-white/[0.04]">
+                      <p className="text-base text-gray-300 font-mono mt-3 bg-white/[0.05] px-4 py-1.5 rounded-full border border-white/[0.08]">
                         {card.phonetic}
                       </p>
                     )}
-                    <span className="text-[10px] text-gray-600 mt-10">Click để xem nghĩa</span>
+                    <span className="text-[11px] text-gray-400 mt-10">Click để xem nghĩa</span>
                   </div>
                   
                   {/* Back Side Card (Vietnamese Meaning) */}
                   <div className="card-3d-back bg-[#0c0c0c] border border-white/[0.03] flex flex-col items-center justify-center text-center">
-                    <span className="text-[10px] font-bold tracking-[0.2em] text-gray-600 uppercase mb-6">Mặt sau (Giải nghĩa)</span>
-                    <h3 className="text-2xl font-bold text-emerald-400 tracking-tight">{card.meaning_vi}</h3>
-                    {card.example_sentence && (
-                      <p className="text-xs text-gray-500 italic mt-4 max-w-[85%] leading-relaxed">
-                        "{card.example_sentence}"
+                    <span className="text-[11px] font-bold tracking-[0.2em] text-gray-400 uppercase mb-6">Mặt sau (Giải nghĩa)</span>
+                    <h3 className="text-4xl font-extrabold text-emerald-400 tracking-tight drop-shadow-sm">{card.meaning_vi || card.meaningVi}</h3>
+                    {(card.example_sentence || card.exampleSentence) && (
+                      <p className="text-sm text-gray-300 italic mt-6 max-w-[85%] leading-relaxed">
+                        "{card.example_sentence || card.exampleSentence}"
                       </p>
                     )}
-                    <span className="text-[10px] text-gray-600 mt-10">Click để lật lại</span>
+                    <span className="text-[11px] text-gray-400 mt-10">Click để lật lại</span>
                   </div>
 
                 </div>
