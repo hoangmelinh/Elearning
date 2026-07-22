@@ -1,0 +1,46 @@
+{
+  "title": "IELTS Academic Reading – The kākāpō",
+  "category": "IELTS",
+  "level": "Band 7.0",
+  "language": "en",
+  "skillType": "reading",
+  "passageText": "The kākāpō\n\nThe kākāpō is a nocturnal, flightless parrot that is critically endangered and one of New Zealand's unique treasures.\n\nThe kākāpō, also known as the owl parrot, is a large, forest-dwelling bird, with a pale owl-like face. Up to 64 cm in length, it has predominantly yellow-green feathers, forward-facing eyes, a large grey beak, large blue feet, and relatively short wings and tail. It is the world's only flightless parrot, and is also possibly one of the world's longest-living birds, with a reported lifespan of up to 100 years.\n\nKākāpō are solitary birds and tend to occupy the same home range for many years. They forage on the ground and climb high into trees. They often leap from trees and flap their wings, but at best manage a controlled descent to the ground. They are entirely vegetarian, with their diet including the leaves, roots and bark of trees as well as bulbs, and fern fronds.\n\nKakapo breed in summer and autumn, but only in years when food is plentiful. Males play no part in incubation or chick-rearing – females alone incubate eggs and feed the chicks. The 1–4 eggs are laid in soil, which is repeatedly turned over before and during incubation. The female kākāpō has to spend long periods away from the nest searching for food, which leaves the unattended eggs and chicks particularly vulnerable to predators.\n\nBefore humans arrived, kākāpō were common throughout New Zealand's forests. However, this all changed with the arrival of the first Polynesian settlers about 700 years ago. For the early settlers, the flightless kākāpō was easy prey. They ate its meat and used its feathers to make soft cloaks. With them came the Polynesian dog and rat, which also preyed on kākāpō. By the time European colonisers arrived in the early 1800s, kakapo had become confined to the central North Island and forested parts of the South Island.",
+  "questions": [
+    {
+      "orderIndex": 1,
+      "questionType": "true_false_not_given",
+      "questionText": "There are other parrots that share the kākāpō's inability to fly.",
+      "correctAnswerText": "FALSE"
+    },
+    {
+      "orderIndex": 2,
+      "questionType": "true_false_not_given",
+      "questionText": "Adult kākāpō produce chicks every year.",
+      "correctAnswerText": "FALSE"
+    },
+    {
+      "orderIndex": 3,
+      "questionType": "true_false_not_given",
+      "questionText": "Adult male kākāpō bring food back to nesting females.",
+      "correctAnswerText": "FALSE"
+    },
+    {
+      "orderIndex": 4,
+      "questionType": "true_false_not_given",
+      "questionText": "Polynesian settlers used kākāpō feathers to make clothing.",
+      "correctAnswerText": "TRUE"
+    },
+    {
+      "orderIndex": 5,
+      "questionType": "true_false_not_given",
+      "questionText": "European colonisers brought new species of predators that harmed kākāpō.",
+      "correctAnswerText": "TRUE"
+    },
+    {
+      "orderIndex": 6,
+      "questionType": "true_false_not_given",
+      "questionText": "Conservationists successfully restored kākāpō populations in the 1890s.",
+      "correctAnswerText": "NOT GIVEN"
+    }
+  ]
+}

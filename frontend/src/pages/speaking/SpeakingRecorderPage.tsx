@@ -1,42 +1,100 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { speakingService } from '../../services/speakingService';
 import {
     Microphone, Stop, ArrowLeft, ArrowRight,
-    CheckCircle, WarningCircle, WaveformSlash,
-    SpeakerHigh, TextT
+    CheckCircle, WarningCircle, Clock,
+    Trophy, Flame, Play, ArrowsClockwise,
+    CircleNotch, CaretRight, CaretLeft
 } from '@phosphor-icons/react';
 
-const MAX_TIME = 120; // 2 minutes
+const MAX_TIME = 120; // 2 minutes per question/part
 
 const SpeakingRecorderPage: React.FC = () => {
+    const navigate = useNavigate();
+    const location = useLocation();
+
+    // Receive state
+    const locationState = (location.state as any) || {};
+    const partType: 'part1' | 'part2' = locationState.partType || 'part1';
+    const topicTitle: string = locationState.topicTitle || 'IELTS Speaking Topic';
+    const questionsList: string[] = locationState.questions || [];
+    const youShouldSayHints: string[] = locationState.youShouldSay || [];
+    const isExamMode: boolean = locationState.isExamMode || false;
+
+    // Active Part 1 Question Index (0-based)
+    const [currentQIndex, setCurrentQIndex] = useState<number>(0);
+
+    // Store recordings/transcripts per question: { [qIndex]: { blob, url, duration } }
+    const [recordedAnswers, setRecordedAnswers] = useState<Record<number, { blob: Blob; url: string; duration: number }>>({});
+
     const [isRecording, setIsRecording] = useState(false);
     const [timeElapsed, setTimeElapsed] = useState(0);
     const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
     const [audioUrl, setAudioUrl] = useState<string | null>(null);
     const [isUploading, setIsUploading] = useState(false);
     const [language, setLanguage] = useState<'en' | 'zh'>('en');
-    const [promptText, setPromptText] = useState('');
     const [error, setError] = useState('');
     const [liveTranscript, setLiveTranscript] = useState('');
-    const [sttAvailable, setSttAvailable] = useState(true);
+
+    // 1-minute Prep Timer state for Part 2 / Exam Mode
+    const [prepTimeLeft, setPrepTimeLeft] = useState<number>(isExamMode || partType === 'part2' ? 60 : 0);
+    const [isPrepActive, setIsPrepActive] = useState<boolean>(isExamMode || partType === 'part2');
 
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const chunksRef = useRef<BlobPart[]>([]);
     const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const prepTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const recognitionRef = useRef<any>(null);
-    const navigate = useNavigate();
 
-    // Detect Web Speech API availability
+    // Active question prompt text
+    const activeQuestionText = useMemo(() => {
+        if (partType === 'part1' && questionsList.length > 0) {
+            return questionsList[currentQIndex] || questionsList[0];
+        }
+        return topicTitle;
+    }, [partType, questionsList, currentQIndex, topicTitle]);
+
+    // When switching active question, load its existing recording if present
     useEffect(() => {
-        const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-        setSttAvailable(!!SpeechRecognition);
-    }, []);
+        const existing = recordedAnswers[currentQIndex];
+        if (existing) {
+            setAudioBlob(existing.blob);
+            setAudioUrl(existing.url);
+            setTimeElapsed(existing.duration);
+        } else {
+            setAudioBlob(null);
+            setAudioUrl(null);
+            setTimeElapsed(0);
+        }
+    }, [currentQIndex, recordedAnswers]);
+
+    // Prep Countdown Timer for Part 2
+    useEffect(() => {
+        if (!isPrepActive) return;
+
+        prepTimerRef.current = setInterval(() => {
+            setPrepTimeLeft(prev => {
+                if (prev <= 1) {
+                    clearInterval(prepTimerRef.current!);
+                    setIsPrepActive(false);
+                    startRecording(); // Auto start recording when prep timer ends
+                    return 0;
+                }
+                return prev - 1;
+            });
+        }, 1000);
+
+        return () => {
+            if (prepTimerRef.current) clearInterval(prepTimerRef.current);
+        };
+    }, [isPrepActive]);
 
     // Cleanup on unmount
     useEffect(() => {
         return () => {
             if (timerRef.current) clearInterval(timerRef.current);
+            if (prepTimerRef.current) clearInterval(prepTimerRef.current);
             if (mediaRecorderRef.current?.state === 'recording') {
                 mediaRecorderRef.current.stop();
             }
@@ -56,10 +114,10 @@ const SpeakingRecorderPage: React.FC = () => {
             setLiveTranscript('');
             setAudioBlob(null);
             setAudioUrl(null);
+            setIsPrepActive(false);
 
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
-            // ── MediaRecorder ──────────────────────────────
             const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
                 ? 'audio/webm;codecs=opus'
                 : 'audio/webm';
@@ -71,14 +129,24 @@ const SpeakingRecorderPage: React.FC = () => {
                 if (e.data.size > 0) chunksRef.current.push(e.data);
             };
 
+            let capturedDuration = 0;
+
             mediaRecorder.onstop = () => {
                 const blob = new Blob(chunksRef.current, { type: mimeType });
+                const url = URL.createObjectURL(blob);
                 setAudioBlob(blob);
-                setAudioUrl(URL.createObjectURL(blob));
+                setAudioUrl(url);
+
+                // Save recording for current question index
+                setRecordedAnswers(prev => ({
+                    ...prev,
+                    [currentQIndex]: { blob, url, duration: capturedDuration }
+                }));
+
                 stream.getTracks().forEach(track => track.stop());
             };
 
-            // ── Web Speech API (live preview only) ────────
+            // Live Web Speech API preview
             const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
             if (SpeechRecognition) {
                 const rec = new SpeechRecognition();
@@ -99,22 +167,19 @@ const SpeakingRecorderPage: React.FC = () => {
                     setLiveTranscript(prev => prev + final + (interim ? `[${interim}]` : ''));
                 };
 
-                rec.onerror = (e: any) => {
-                    if (e.error !== 'aborted') {
-                        console.warn('Web Speech API error:', e.error);
-                    }
-                };
+                rec.onerror = () => {};
 
                 rec.start();
                 recognitionRef.current = rec;
             }
 
-            mediaRecorder.start(250); // collect chunks every 250 ms
+            mediaRecorder.start(250);
             setIsRecording(true);
             setTimeElapsed(0);
 
             timerRef.current = setInterval(() => {
                 setTimeElapsed(prev => {
+                    capturedDuration = prev + 1;
                     if (prev >= MAX_TIME - 1) {
                         stopRecording();
                         return MAX_TIME;
@@ -141,17 +206,46 @@ const SpeakingRecorderPage: React.FC = () => {
         setIsRecording(false);
     }, []);
 
+    const handleNextQuestion = () => {
+        if (isRecording) stopRecording();
+        if (currentQIndex < questionsList.length - 1) {
+            setCurrentQIndex(prev => prev + 1);
+        }
+    };
+
+    const handlePrevQuestion = () => {
+        if (isRecording) stopRecording();
+        if (currentQIndex > 0) {
+            setCurrentQIndex(prev => prev - 1);
+        }
+    };
+
     const handleSubmit = async () => {
-        if (!audioBlob) return;
+        const activeBlob = audioBlob || recordedAnswers[currentQIndex]?.blob;
+        if (!activeBlob) {
+            alert('Vui lòng thu âm ít nhất 1 câu hỏi trước khi gửi chấm điểm!');
+            return;
+        }
 
         try {
             setIsUploading(true);
             setError('');
 
+            // Build detailed prompt mapping so AI evaluator evaluates each question cleanly
+            let fullPromptText = `${topicTitle}\n\n`;
+            if (partType === 'part1' && questionsList.length > 0) {
+                fullPromptText += `Part 1 Questions:\n` + questionsList.map((q, idx) => {
+                    const hasAns = !!recordedAnswers[idx];
+                    return `Question ${idx + 1}: ${q} [Status: ${hasAns ? 'Recorded' : 'Skipped'}]`;
+                }).join('\n');
+            } else {
+                fullPromptText += `Cue Card Topic: ${topicTitle}`;
+            }
+
             const { recordingId } = await speakingService.submitRecording({
-                audioBlob,
+                audioBlob: activeBlob,
                 language,
-                promptText: promptText.trim() || undefined,
+                promptText: fullPromptText,
             });
 
             navigate(`/speaking/analysis/${recordingId}`);
@@ -161,197 +255,234 @@ const SpeakingRecorderPage: React.FC = () => {
         }
     };
 
+    const recordedCount = Object.keys(recordedAnswers).length;
+    const totalQuestionsCount = questionsList.length || 1;
     const progress = (timeElapsed / MAX_TIME) * 100;
 
     return (
-        <div className="min-h-screen bg-transparent text-[#f5f5f5] pb-24 relative z-10">
-            <div className="max-w-2xl mx-auto px-6 pt-12">
+        <div className="min-h-[100dvh] bg-[#050505] text-[#f5f5f5] pt-6 pb-28 px-4 md:px-8 max-w-[1200px] mx-auto font-sans">
+            
+            {/* Back Navigation Header */}
+            <div className="mb-6 flex items-center justify-between">
+                <Link
+                    to="/speaking"
+                    className="inline-flex items-center gap-2 text-gray-400 hover:text-white transition-colors text-xs font-semibold bg-[#0a0a0e] border border-white/5 px-4 py-2 rounded-xl"
+                >
+                    <ArrowLeft size={14} />
+                    Quay lại Bộ đề Speaking
+                </Link>
+                {isExamMode && (
+                    <span className="px-3 py-1 rounded-md bg-red-500/10 text-red-400 border border-red-500/30 text-xs font-bold uppercase flex items-center gap-1.5">
+                        <Flame size={14} />
+                        Chế độ thi thật
+                    </span>
+                )}
+            </div>
 
-                {/* Back header */}
-                <div className="mb-8">
-                    <Link
-                        to="/speaking"
-                        className="inline-flex items-center gap-2 text-gray-500 hover:text-white transition-colors text-xs font-semibold uppercase tracking-wider"
-                    >
-                        <ArrowLeft size={14} />
-                        Quay lại
-                    </Link>
-                </div>
-
-                <div className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.2em] font-semibold bg-white/[0.04] border border-white/[0.05] text-gray-400 mb-3">
-                    Luyện nói
-                </div>
-                <h1 className="text-3xl font-extrabold tracking-tight text-white mb-2">AI Speaking Practice</h1>
-                <p className="text-gray-500 text-sm mb-10 leading-relaxed">
-                    Ghi âm giọng nói, AI sẽ phân tích phát âm và ngữ pháp qua Nvidia Whisper.
-                </p>
-
-                {/* Settings Card */}
-                <div className="rounded-[2rem] bg-white/[0.015] border border-white/[0.05] p-2 mb-6">
-                    <div className="rounded-[calc(2rem-0.5rem)] bg-[#0a0a0a] border border-white/[0.02] p-6 space-y-5">
-                        {/* Language picker */}
-                        <div>
-                            <label className="block text-[10px] font-bold tracking-[0.15em] text-gray-500 uppercase mb-2">
-                                Ngôn ngữ luyện tập
-                            </label>
-                            <select
-                                value={language}
-                                onChange={(e) => setLanguage(e.target.value as 'en' | 'zh')}
-                                disabled={isRecording || isUploading}
-                                className="w-full bg-white/[0.02] border border-white/[0.05] rounded-xl px-4 py-3 text-white focus:border-white/20 outline-none text-sm font-medium cursor-pointer transition-all"
-                            >
-                                <option value="en" className="bg-[#0c0c0c]">🇬🇧 Tiếng Anh (English)</option>
-                                <option value="zh" className="bg-[#0c0c0c]">🇨🇳 Tiếng Trung (Mandarin)</option>
-                            </select>
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                
+                {/* Left Side: Active Sequential Question or Cue Card Details */}
+                <div className="lg:col-span-6 space-y-6">
+                    <div className="bg-[#0a0a0e] border border-white/5 rounded-3xl p-6 md:p-8 shadow-xl space-y-5">
+                        
+                        {/* Header Badge & Title */}
+                        <div className="flex items-center justify-between pb-3 border-b border-white/5">
+                            <span className="text-xs font-bold text-indigo-400 uppercase tracking-wider flex items-center gap-2">
+                                <Microphone size={16} />
+                                {partType === 'part1' ? `PART 1: CÂU HỎI ${currentQIndex + 1} / ${totalQuestionsCount}` : 'PART 2: CUE CARD'}
+                            </span>
+                            <span className="text-xs text-gray-400">
+                                {topicTitle}
+                            </span>
                         </div>
 
-                        {/* Prompt */}
-                        <div>
-                            <label className="block text-[10px] font-bold tracking-[0.15em] text-gray-500 uppercase mb-2">
-                                Chủ đề / Bài đọc <span className="normal-case text-gray-700">(Không bắt buộc)</span>
-                            </label>
-                            <textarea
-                                value={promptText}
-                                onChange={(e) => setPromptText(e.target.value)}
-                                placeholder={language === 'zh'
-                                    ? '例如：请介绍一下你自己...'
-                                    : 'E.g., Introduce yourself, or paste a paragraph to read aloud...'
-                                }
-                                disabled={isRecording || isUploading}
-                                className="w-full bg-white/[0.02] border border-white/[0.05] rounded-xl px-4 py-3 text-white placeholder-gray-700 focus:border-white/20 outline-none text-sm resize-none h-24 transition-all"
-                            />
-                        </div>
-                    </div>
-                </div>
+                        {/* PART 1 Sequential Question Box */}
+                        {partType === 'part1' && questionsList.length > 0 && (
+                            <div className="space-y-4">
+                                <div className="bg-white/[0.02] p-5 rounded-2xl border border-white/5 space-y-2">
+                                    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block">
+                                        Câu hỏi {currentQIndex + 1}:
+                                    </span>
+                                    <h2 className="text-lg font-bold text-white leading-relaxed">
+                                        {activeQuestionText}
+                                    </h2>
+                                </div>
 
-                {/* Recorder card */}
-                <div className={`rounded-[2rem] border p-2 mb-6 transition-all duration-500 ${
-                    isRecording
-                        ? 'bg-red-500/[0.03] border-red-500/30'
-                        : 'bg-white/[0.015] border-white/[0.05]'
-                }`}>
-                    <div className={`rounded-[calc(2rem-0.5rem)] bg-[#0a0a0a] border p-8 flex flex-col items-center transition-all duration-500 ${
-                        isRecording ? 'border-red-500/10' : 'border-white/[0.02]'
-                    }`}>
-                        {/* Timer + progress ring */}
-                        <div className="relative mb-6">
-                            <svg className="w-32 h-32 -rotate-90" viewBox="0 0 100 100">
-                                <circle cx="50" cy="50" r="44" fill="none" stroke="rgba(255,255,255,0.04)" strokeWidth="3" />
-                                <circle
-                                    cx="50" cy="50" r="44" fill="none"
-                                    stroke={isRecording ? 'rgba(239,68,68,0.7)' : 'rgba(255,255,255,0.1)'}
-                                    strokeWidth="3"
-                                    strokeDasharray={`${progress * 2.764} 276.4`}
-                                    strokeLinecap="round"
-                                    className="transition-all duration-1000"
-                                />
-                            </svg>
-                            <div className="absolute inset-0 flex flex-col items-center justify-center">
-                                <span className={`text-2xl font-mono font-bold tracking-tight ${isRecording ? 'text-red-400' : 'text-white'}`}>
-                                    {formatTime(timeElapsed)}
-                                </span>
-                                <span className="text-[10px] text-gray-600">{formatTime(MAX_TIME)}</span>
+                                {/* Part 1 Question Step Pills */}
+                                <div className="space-y-2">
+                                    <div className="flex items-center justify-between text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+                                        <span>Danh sách câu hỏi lần lượt:</span>
+                                        <span className="text-indigo-400">Đã thu âm {recordedCount}/{totalQuestionsCount} câu</span>
+                                    </div>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        {questionsList.map((q, idx) => {
+                                            const isDone = !!recordedAnswers[idx];
+                                            const isCurrent = idx === currentQIndex;
+
+                                            return (
+                                                <button
+                                                    key={idx}
+                                                    onClick={() => {
+                                                        if (isRecording) stopRecording();
+                                                        setCurrentQIndex(idx);
+                                                    }}
+                                                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${isCurrent ? 'bg-indigo-600 border-indigo-500 text-white font-bold' : isDone ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-white/5 border-white/5 text-gray-400 hover:text-white'}`}
+                                                >
+                                                    Câu {idx + 1} {isDone ? '✓' : ''}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
                             </div>
-                        </div>
-
-                        {/* Record / Stop button */}
-                        {!isRecording ? (
-                            <button
-                                onClick={startRecording}
-                                disabled={isUploading}
-                                className="group w-20 h-20 rounded-full bg-white/[0.05] border border-white/10 hover:bg-white/10 hover:border-white/20 flex items-center justify-center transition-all duration-300 disabled:opacity-30 mb-4"
-                                title="Bắt đầu ghi âm"
-                            >
-                                <Microphone size={32} className="text-white group-hover:scale-110 transition-transform" />
-                            </button>
-                        ) : (
-                            <button
-                                onClick={stopRecording}
-                                className="group w-20 h-20 rounded-full bg-red-500/10 border border-red-500/40 hover:bg-red-500/20 flex items-center justify-center transition-all duration-300 animate-pulse mb-4"
-                                title="Dừng ghi âm"
-                            >
-                                <Stop size={32} className="text-red-400" />
-                            </button>
                         )}
 
-                        <p className={`text-xs font-semibold uppercase tracking-widest transition-colors ${
-                            isRecording ? 'text-red-400' : 'text-gray-600'
-                        }`}>
-                            {isRecording ? 'Đang ghi âm...' : 'Nhấn để ghi âm'}
-                        </p>
+                        {/* PART 2 Cue Card & Optional Hints Box */}
+                        {partType === 'part2' && (
+                            <div className="space-y-4">
+                                <h2 className="text-lg font-bold text-white leading-snug">
+                                    {topicTitle}
+                                </h2>
 
-                        {/* Live transcript preview */}
-                        {isRecording && (
-                            <div className="mt-6 w-full p-4 rounded-xl bg-white/[0.02] border border-white/[0.04] min-h-[60px]">
-                                <div className="flex items-center gap-2 mb-2">
-                                    <TextT size={12} className="text-gray-600" />
-                                    <span className="text-[10px] font-bold text-gray-600 uppercase tracking-wider">
-                                        Văn bản nhận dạng (xem trước)
-                                    </span>
-                                </div>
-                                {liveTranscript ? (
-                                    <p className="text-sm text-gray-300 leading-relaxed font-mono">
-                                        {liveTranscript}
-                                    </p>
-                                ) : (
-                                    <p className="text-xs text-gray-700 italic">
-                                        {sttAvailable ? 'Đang lắng nghe...' : 'Trình duyệt không hỗ trợ xem trước — AI sẽ transcribe sau.'}
-                                    </p>
+                                {youShouldSayHints.length > 0 && (
+                                    <div className="bg-white/[0.02] p-5 rounded-2xl border border-white/5 space-y-2">
+                                        <span className="text-xs font-semibold text-indigo-400 uppercase tracking-wider block">
+                                            💡 Gợi ý dàn bài (Optional Hints to cover in 2 minutes):
+                                        </span>
+                                        <ul className="text-xs text-gray-300 space-y-1.5 pl-1 font-medium">
+                                            {youShouldSayHints.map((hint, idx) => (
+                                                <li key={idx} className="flex items-start gap-2">
+                                                    <span className="text-gray-500">•</span>
+                                                    <span>{hint}</span>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
                                 )}
                             </div>
                         )}
+
+                        <div className="text-xs text-gray-400 pt-2 border-t border-white/5">
+                            <p>💡 Thu âm xong mỗi câu, hệ thống sẽ lưu bản ghi của câu đó để AI phân tích chính xác từng câu hỏi.</p>
+                        </div>
                     </div>
                 </div>
 
-                {/* Playback + Submit */}
-                {audioBlob && !isRecording && (
-                    <div className="space-y-4 mb-6">
-                        <div className="rounded-2xl bg-white/[0.015] border border-white/[0.05] p-4">
-                            <div className="flex items-center gap-2 mb-3">
-                                <SpeakerHigh size={14} className="text-gray-500" />
-                                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Nghe lại bản ghi</span>
+                {/* Right Side: Microphone & Audio Recorder */}
+                <div className="lg:col-span-6 space-y-6">
+                    <div className="bg-[#0a0a0e] border border-white/5 rounded-3xl p-6 md:p-8 shadow-xl text-center space-y-6">
+                        
+                        {/* 1-Minute Prep Countdown for Part 2 */}
+                        {isPrepActive && (
+                            <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 space-y-2">
+                                <span className="text-xs font-bold text-amber-400 uppercase tracking-wider block">
+                                    ⏳ Thời gian chuẩn bị Part 2 (1 Phút):
+                                </span>
+                                <span className="text-3xl font-bold text-white block">
+                                    00:{prepTimeLeft.toString().padStart(2, '0')}
+                                </span>
+                                <button
+                                    onClick={() => { setIsPrepActive(false); startRecording(); }}
+                                    className="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-4 py-1.5 rounded-lg text-xs transition-colors"
+                                >
+                                    Bỏ qua chuẩn bị & Thu âm ngay
+                                </button>
                             </div>
-                            <audio src={audioUrl!} controls className="w-full opacity-80 hover:opacity-100 transition-opacity" />
+                        )}
+
+                        {/* Speaking Timer Display */}
+                        <div className="space-y-2">
+                            <span className="text-xs text-gray-400 font-semibold uppercase tracking-wider block">
+                                {partType === 'part1' ? `Thời gian thu âm Câu ${currentQIndex + 1}` : 'Thời gian thu âm Part 2'}
+                            </span>
+                            <span className={`text-4xl font-black block tracking-tight ${isRecording ? 'text-red-400 animate-pulse' : 'text-white'}`}>
+                                {formatTime(timeElapsed)}
+                            </span>
+
+                            <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden border border-white/5 mt-3">
+                                <div 
+                                    className="h-full bg-indigo-500 transition-all duration-300"
+                                    style={{ width: `${progress}%` }}
+                                />
+                            </div>
                         </div>
 
-                        {/* STT note */}
-                        <div className="flex items-start gap-3 p-4 rounded-xl bg-indigo-500/[0.04] border border-indigo-500/[0.12] text-xs text-indigo-300/80">
-                            <WaveformSlash size={16} className="flex-shrink-0 mt-0.5 text-indigo-400" />
-                            <span>
-                                AI <strong className="text-indigo-300">Nvidia Whisper</strong> sẽ tự động chuyển giọng nói thành văn bản sau khi bạn gửi. 
-                                Quá trình này mất khoảng 10–30 giây.
-                            </span>
-                        </div>
+                        {/* Error Message */}
+                        {error && (
+                            <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-xs text-red-400 flex items-center justify-center gap-2">
+                                <WarningCircle size={16} />
+                                {error}
+                            </div>
+                        )}
 
-                        <button
-                            onClick={handleSubmit}
-                            disabled={isUploading}
-                            className="group w-full flex items-center justify-between bg-white hover:bg-white/95 disabled:opacity-30 disabled:pointer-events-none text-black pl-6 pr-2.5 py-3.5 rounded-full font-bold text-sm transition-all duration-300 active:scale-[0.98]"
-                        >
-                            <span>
-                                {isUploading ? 'Đang gửi & phân tích...' : 'Gửi để AI phân tích'}
-                            </span>
-                            {isUploading ? (
-                                <div className="w-8 h-8 rounded-full bg-[#0a0a0a] flex items-center justify-center">
-                                    <div className="w-4 h-4 border-2 border-gray-400 border-t-white rounded-full animate-spin" />
-                                </div>
+                        {/* Record Button */}
+                        <div className="py-4">
+                            {!isRecording ? (
+                                <button
+                                    onClick={startRecording}
+                                    disabled={isUploading || isPrepActive}
+                                    className="w-20 h-20 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white flex items-center justify-center mx-auto shadow-lg shadow-indigo-600/30 hover:scale-105 transition-all disabled:opacity-50"
+                                >
+                                    <Microphone size={36} weight="fill" />
+                                </button>
                             ) : (
-                                <div className="w-8 h-8 rounded-full bg-[#0a0a0a] text-white flex items-center justify-center transition-transform duration-300 group-hover:translate-x-1">
-                                    <ArrowRight size={14} weight="bold" />
-                                </div>
+                                <button
+                                    onClick={stopRecording}
+                                    className="w-20 h-20 rounded-full bg-red-600 hover:bg-red-500 text-white flex items-center justify-center mx-auto shadow-lg shadow-red-600/30 animate-pulse transition-all"
+                                >
+                                    <Stop size={36} weight="fill" />
+                                </button>
                             )}
-                        </button>
-                    </div>
-                )}
+                            <span className="text-xs text-gray-400 font-medium block mt-3">
+                                {isRecording ? 'Nhấn để dừng ghi âm câu này' : recordedAnswers[currentQIndex] ? 'Nhấn nút để thu âm lại câu này' : 'Nhấn nút để bắt đầu nói câu này'}
+                            </span>
+                        </div>
 
-                {/* Error banner */}
-                {error && (
-                    <div className="flex items-center gap-3 p-4 rounded-2xl bg-red-500/[0.05] border border-red-500/20 text-red-400 text-xs font-semibold">
-                        <WarningCircle size={18} className="flex-shrink-0" />
-                        {error}
+                        {/* Audio Controls & Next Question Action */}
+                        {audioUrl && !isRecording && (
+                            <div className="space-y-4 pt-4 border-t border-white/5">
+                                <div className="text-xs text-emerald-400 font-semibold flex items-center justify-center gap-1.5">
+                                    <CheckCircle size={16} /> Đã lưu bản ghi cho Câu {currentQIndex + 1}
+                                </div>
+                                <audio src={audioUrl} controls className="w-full rounded-xl" />
+
+                                <div className="flex items-center gap-3">
+                                    {partType === 'part1' && currentQIndex < totalQuestionsCount - 1 && (
+                                        <button
+                                            onClick={handleNextQuestion}
+                                            className="flex-1 bg-white/10 hover:bg-white/20 border border-white/10 text-white font-semibold py-3 px-4 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-colors"
+                                        >
+                                            <span>Chuyển sang Câu {currentQIndex + 2}</span>
+                                            <CaretRight size={14} />
+                                        </button>
+                                    )}
+
+                                    <button
+                                        onClick={handleSubmit}
+                                        disabled={isUploading}
+                                        className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-4 rounded-xl text-xs uppercase tracking-wider shadow-lg shadow-indigo-600/20 transition-all flex items-center justify-center gap-2"
+                                    >
+                                        {isUploading ? (
+                                            <>
+                                                <CircleNotch size={16} className="animate-spin" />
+                                                <span>AI đang chấm điểm...</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <CheckCircle size={16} />
+                                                <span>Gửi AI Chấm Điểm</span>
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
                     </div>
-                )}
+                </div>
+
             </div>
+
         </div>
     );
 };

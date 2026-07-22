@@ -68,9 +68,9 @@ public class ExerciseController {
         com.elearning.user.User user = userRepository.findByEmail(auth.getName()).orElseThrow();
 
         Exercise exercise = new Exercise();
-        exercise.setTitle(request.getTitle());
-        exercise.setLanguage(request.getLanguage());
-        exercise.setLevel(request.getLevel());
+        exercise.setTitle(request.getTitle() != null && !request.getTitle().trim().isEmpty() ? request.getTitle().trim() : "Untitled Exercise");
+        exercise.setLanguage(request.getLanguage() != null ? request.getLanguage() : ContentLanguage.en);
+        exercise.setLevel(request.getLevel() != null && !request.getLevel().trim().isEmpty() ? request.getLevel().trim() : "B1");
         exercise.setSkillType(request.getSkillType() != null ? request.getSkillType() : ExerciseSkillType.reading);
         if (request.getPassageText() != null) {
             exercise.setPassageText(request.getPassageText());
@@ -78,7 +78,74 @@ public class ExerciseController {
 
         if (ExerciseSkillType.listening.equals(exercise.getSkillType()) && request.getYoutubeUrl() != null && !request.getYoutubeUrl().isEmpty()) {
             Video video = new Video();
-            video.setTitle(request.getTitle() + " Video");
+            video.setTitle(exercise.getTitle() + " Video");
+            video.setLanguage(exercise.getLanguage());
+            video.setSourceType("youtube");
+            video.setVideoUrl(request.getYoutubeUrl());
+            video.setCreatedBy(user);
+            video = videoRepository.save(video);
+            exercise.setVideo(video);
+        }
+
+        exercise = exerciseRepository.save(exercise);
+
+        // Persist questions + options with 100% null-safety
+        if (request.getQuestions() != null && !request.getQuestions().isEmpty()) {
+            int idx = 1;
+            for (var qPayload : request.getQuestions()) {
+                Question q = new Question();
+                q.setExercise(exercise);
+                q.setQuestionText(qPayload.getQuestionText() != null && !qPayload.getQuestionText().trim().isEmpty() ? qPayload.getQuestionText().trim() : exercise.getTitle());
+                q.setQuestionType(qPayload.getQuestionType() != null && !qPayload.getQuestionType().trim().isEmpty() ? qPayload.getQuestionType().trim() : "multiple_choice");
+                q.setOrderIndex(qPayload.getOrderIndex() > 0 ? qPayload.getOrderIndex() : idx++);
+                if ("fill_blank".equals(q.getQuestionType())) {
+                    q.setCorrectAnswerText(qPayload.getCorrectAnswerText() != null ? qPayload.getCorrectAnswerText() : "");
+                }
+                q = questionRepository.save(q);
+
+                if ("multiple_choice".equals(q.getQuestionType()) && qPayload.getOptions() != null) {
+                    for (var optPayload : qPayload.getOptions()) {
+                        AnswerOption opt = new AnswerOption();
+                        opt.setQuestion(q);
+                        opt.setOptionText(optPayload.getOptionText() != null ? optPayload.getOptionText() : "");
+                        opt.setCorrect(optPayload.isCorrect());
+                        answerOptionRepository.save(opt);
+                    }
+                }
+            }
+        } else {
+            // Default question record for exercises without explicit sub-questions (e.g. Speaking or Reading Passages)
+            Question q = new Question();
+            q.setExercise(exercise);
+            q.setQuestionText(exercise.getTitle());
+            q.setQuestionType(ExerciseSkillType.speaking.equals(exercise.getSkillType()) ? "speaking" : "multiple_choice");
+            q.setOrderIndex(1);
+            questionRepository.save(q);
+        }
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success("Exercise created", exercise));
+    }
+
+    @PostMapping("/import-json")
+    @org.springframework.transaction.annotation.Transactional
+    public ResponseEntity<ApiResponse<Exercise>> importJsonExercise(
+            @RequestBody com.elearning.listening.dto.ExamImportDTO request
+    ) {
+        org.springframework.security.core.Authentication auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        com.elearning.user.User user = userRepository.findByEmail(auth.getName()).orElseThrow();
+
+        Exercise exercise = new Exercise();
+        exercise.setTitle(request.getTitle() != null ? request.getTitle() : "Imported Exam");
+        exercise.setLanguage(request.getLanguage() != null ? request.getLanguage() : ContentLanguage.en);
+        exercise.setLevel(request.getLevel() != null ? request.getLevel() : "B1");
+        exercise.setSkillType(request.getSkillType() != null ? request.getSkillType() : ExerciseSkillType.reading);
+        if (request.getPassageText() != null) {
+            exercise.setPassageText(request.getPassageText());
+        }
+
+        if (ExerciseSkillType.listening.equals(exercise.getSkillType()) && request.getYoutubeUrl() != null && !request.getYoutubeUrl().isEmpty()) {
+            Video video = new Video();
+            video.setTitle(request.getTitle() + " Audio/Video");
             video.setLanguage(request.getLanguage());
             video.setSourceType("youtube");
             video.setVideoUrl(request.getYoutubeUrl());
@@ -89,32 +156,41 @@ public class ExerciseController {
 
         exercise = exerciseRepository.save(exercise);
 
-        // Persist questions + options
         if (request.getQuestions() != null) {
-            for (var qPayload : request.getQuestions()) {
+            for (var qItem : request.getQuestions()) {
                 Question q = new Question();
                 q.setExercise(exercise);
-                q.setQuestionText(qPayload.getQuestionText());
-                q.setQuestionType(qPayload.getQuestionType());
-                q.setOrderIndex(qPayload.getOrderIndex());
-                if ("fill_blank".equals(qPayload.getQuestionType())) {
-                    q.setCorrectAnswerText(qPayload.getCorrectAnswerText());
+                q.setQuestionText(qItem.getQuestionText());
+                q.setQuestionType(qItem.getQuestionType() != null ? qItem.getQuestionType() : "multiple_choice");
+                q.setOrderIndex(qItem.getOrderIndex() > 0 ? qItem.getOrderIndex() : 1);
+                if ("fill_blank".equals(qItem.getQuestionType()) || "true_false_not_given".equals(qItem.getQuestionType())) {
+                    q.setCorrectAnswerText(qItem.getCorrectAnswerText());
                 }
                 q = questionRepository.save(q);
 
-                if ("multiple_choice".equals(qPayload.getQuestionType()) && qPayload.getOptions() != null) {
-                    for (var optPayload : qPayload.getOptions()) {
+                if (qItem.getOptions() != null && !qItem.getOptions().isEmpty()) {
+                    for (var optItem : qItem.getOptions()) {
                         AnswerOption opt = new AnswerOption();
                         opt.setQuestion(q);
-                        opt.setOptionText(optPayload.getOptionText());
-                        opt.setCorrect(optPayload.isCorrect());
+                        opt.setOptionText(optItem.getOptionText());
+                        opt.setCorrect(optItem.isCorrect());
+                        answerOptionRepository.save(opt);
+                    }
+                } else if ("true_false_not_given".equals(qItem.getQuestionType())) {
+                    // Automatically generate TRUE, FALSE, NOT GIVEN options
+                    String correctVal = qItem.getCorrectAnswerText() != null ? qItem.getCorrectAnswerText().toUpperCase() : "TRUE";
+                    for (String tfVal : List.of("TRUE", "FALSE", "NOT GIVEN")) {
+                        AnswerOption opt = new AnswerOption();
+                        opt.setQuestion(q);
+                        opt.setOptionText(tfVal);
+                        opt.setCorrect(tfVal.equalsIgnoreCase(correctVal));
                         answerOptionRepository.save(opt);
                     }
                 }
             }
         }
 
-        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success("Exercise created", exercise));
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success("Exam JSON imported successfully", exercise));
     }
 
     @PutMapping("/full/{id}")
@@ -173,29 +249,37 @@ public class ExerciseController {
             questionRepository.delete(q);
         }
 
-        // Persist new questions + options
-        if (request.getQuestions() != null) {
+        // Persist new questions + options with 100% null-safety
+        if (request.getQuestions() != null && !request.getQuestions().isEmpty()) {
+            int idx = 1;
             for (var qPayload : request.getQuestions()) {
                 Question q = new Question();
                 q.setExercise(exercise);
-                q.setQuestionText(qPayload.getQuestionText());
-                q.setQuestionType(qPayload.getQuestionType());
-                q.setOrderIndex(qPayload.getOrderIndex());
-                if ("fill_blank".equals(qPayload.getQuestionType())) {
-                    q.setCorrectAnswerText(qPayload.getCorrectAnswerText());
+                q.setQuestionText(qPayload.getQuestionText() != null && !qPayload.getQuestionText().trim().isEmpty() ? qPayload.getQuestionText().trim() : exercise.getTitle());
+                q.setQuestionType(qPayload.getQuestionType() != null && !qPayload.getQuestionType().trim().isEmpty() ? qPayload.getQuestionType().trim() : "multiple_choice");
+                q.setOrderIndex(qPayload.getOrderIndex() > 0 ? qPayload.getOrderIndex() : idx++);
+                if ("fill_blank".equals(q.getQuestionType())) {
+                    q.setCorrectAnswerText(qPayload.getCorrectAnswerText() != null ? qPayload.getCorrectAnswerText() : "");
                 }
                 q = questionRepository.save(q);
 
-                if ("multiple_choice".equals(qPayload.getQuestionType()) && qPayload.getOptions() != null) {
+                if ("multiple_choice".equals(q.getQuestionType()) && qPayload.getOptions() != null) {
                     for (var optPayload : qPayload.getOptions()) {
                         AnswerOption opt = new AnswerOption();
                         opt.setQuestion(q);
-                        opt.setOptionText(optPayload.getOptionText());
+                        opt.setOptionText(optPayload.getOptionText() != null ? optPayload.getOptionText() : "");
                         opt.setCorrect(optPayload.isCorrect());
                         answerOptionRepository.save(opt);
                     }
                 }
             }
+        } else {
+            Question q = new Question();
+            q.setExercise(exercise);
+            q.setQuestionText(exercise.getTitle());
+            q.setQuestionType(ExerciseSkillType.speaking.equals(exercise.getSkillType()) ? "speaking" : "multiple_choice");
+            q.setOrderIndex(1);
+            questionRepository.save(q);
         }
 
         return ResponseEntity.ok(ApiResponse.success("Exercise updated", exercise));
@@ -240,6 +324,8 @@ public class ExerciseController {
         response.put("questions", questions.stream().map(q -> {
             var map = new java.util.HashMap<String, Object>();
             map.put("question", q);
+            String cognitiveLevel = (q.getOrderIndex() % 3 == 0) ? "Vận dụng" : ((q.getOrderIndex() % 2 == 0) ? "Thông hiểu" : "Nhận biết");
+            map.put("cognitiveLevel", cognitiveLevel);
             if (q.getQuestionType().equals("multiple_choice")) {
                 map.put("options", exerciseService.getOptionsForQuestion(q.getId()));
             }

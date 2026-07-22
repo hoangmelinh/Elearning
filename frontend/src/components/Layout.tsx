@@ -16,9 +16,8 @@ const navItems = [
   { path: '/dashboard',  label: 'Tổng quan',    icon: House,        color: 'text-white' },
   { path: '/vocabulary', label: 'Từ vựng',      icon: Cards,        color: 'text-purple-400' },
   { path: '/speaking',   label: 'Luyện nói',    icon: Microphone,   color: 'text-indigo-400' },
-  { path: '/listening',  label: 'Luyện nghe',   icon: Headphones,   color: 'text-sky-400' },
-  { path: '/reading', label: 'Luyện đọc', icon: BookOpenText, color: 'text-emerald-400' },
-  { path: '/writing', label: 'Luyện viết', icon: PenNib,      color: 'text-orange-400' },
+  { path: '/reading',    label: 'Luyện đề',     icon: BookOpenText, color: 'text-emerald-400' },
+  { path: '/writing',    label: 'Luyện viết',   icon: PenNib,       color: 'text-orange-400' },
 ];
 
 const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -36,8 +35,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     if (path === '/dashboard') return location.pathname === '/dashboard';
     if (path.startsWith('/vocabulary')) return location.pathname.startsWith('/vocabulary');
     if (path.startsWith('/speaking')) return location.pathname.startsWith('/speaking');
-    if (path.startsWith('/listening')) return location.pathname.startsWith('/listening');
-    if (path.startsWith('/reading')) return location.pathname.startsWith('/reading');
+    if (path.startsWith('/reading') || path.startsWith('/listening')) return location.pathname.startsWith('/reading') || location.pathname.startsWith('/listening');
     if (path.startsWith('/writing')) return location.pathname.startsWith('/writing');
     return false;
   };
