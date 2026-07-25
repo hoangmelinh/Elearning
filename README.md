@@ -4,6 +4,16 @@ Hệ thống ứng dụng web quản lý và vận hành chương trình học n
 
 ---
 
+## 🌐 Live Demo & Production Registry
+
+* **Live Demo Web Application**: `http://<YOUR_EC2_OR_DOMAIN_URL>`
+* **Backend REST API Docs / Services**: `http://<YOUR_EC2_OR_DOMAIN_URL>:8081`
+* **Docker Hub Registry Images**:
+  * Frontend Image: [`hoangmelinh/elearning-frontend:latest`](https://hub.docker.com/r/hoangmelinh/elearning-frontend)
+  * Backend Image: [`hoangmelinh/elearning-backend:latest`](https://hub.docker.com/r/hoangmelinh/elearning-backend)
+
+---
+
 ## Architecture Blueprint
 
 ```mermaid
@@ -215,16 +225,16 @@ docker-compose up -d
 
 ---
 
-### Option 2: Production Deployment Environment
+### Option 2: Production Deployment Environment (AWS EC2)
 
-Sử dụng `docker-compose.prod.yml` để triển khai môi trường Production kéo các image đã được đóng gói từ Docker Hub:
+Dự án sử dụng GitHub Actions CI/CD (`.github/workflows/ci-cd.yml`) tự động đóng gói Docker Images đẩy lên Docker Hub và deploy tự động tới máy chủ **AWS EC2**:
 
 ```bash
-# Khởi chạy trên máy chủ Production
+# Triển khai thủ công trên server EC2
 docker-compose -f docker-compose.prod.yml up -d
 ```
 
-#### Các biến môi trường bắt buộc cho Production:
+#### Các biến môi trường cho Production:
 ```env
 SPRING_PROFILES_ACTIVE=dev
 DB_URL=jdbc:postgresql://<neon-or-supabase-host>:5432/elearning_db
