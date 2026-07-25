@@ -1,16 +1,8 @@
 # Multilingual E-Learning Platform Engine
 
-Hệ thống ứng dụng web quản lý và vận hành chương trình học ngoại ngữ song ngữ (English / Chinese) tích hợp trí tuệ nhân tạo (Groq Whisper STT + NVIDIA NIM Llama 3.1 AI Engine).
+Nền tảng học ngoại ngữ song ngữ (English / Chinese) tích hợp trí tuệ nhân tạo (Groq Whisper STT + NVIDIA NIM Llama 3.1 AI Engine).
 
----
-
-## 🌐 Live Demo & Production Registry
-
-* **Live Demo Web Application**: `http://<YOUR_EC2_OR_DOMAIN_URL>`
-* **Backend REST API Docs / Services**: `http://<YOUR_EC2_OR_DOMAIN_URL>:8081`
-* **Docker Hub Registry Images**:
-  * Frontend Image: [`hoangmelinh/elearning-frontend:latest`](https://hub.docker.com/r/hoangmelinh/elearning-frontend)
-  * Backend Image: [`hoangmelinh/elearning-backend:latest`](https://hub.docker.com/r/hoangmelinh/elearning-backend)
+🔗 **Live Application Demo**: [https://learningenglish.id.vn](https://learningenglish.id.vn/)
 
 ---
 
@@ -218,11 +210,6 @@ cd website_elearning
 docker-compose up -d
 ```
 
-#### Cấu hình biến môi trường cục bộ (Chỉnh sửa trong `.env` hoặc file cấu hình):
-* `GROQ_API_KEY`: API Key từ Groq Cloud (Xử lý Whisper STT)
-* `NVIDIA_API_KEY`: API Key từ NVIDIA NIM (Xử lý Llama 3.1 AI)
-* `CLOUDINARY_URL`: Chuỗi kết nối Cloudinary upload media
-
 ---
 
 ### Option 2: Production Deployment Environment (AWS EC2)
@@ -234,26 +221,12 @@ Dự án sử dụng GitHub Actions CI/CD (`.github/workflows/ci-cd.yml`) tự �
 docker-compose -f docker-compose.prod.yml up -d
 ```
 
-#### Các biến môi trường cho Production:
-```env
-SPRING_PROFILES_ACTIVE=dev
-DB_URL=jdbc:postgresql://<neon-or-supabase-host>:5432/elearning_db
-DB_USER=<db_user>
-DB_PASS=<db_pass>
-JWT_SECRET=<production_jwt_secret>
-GROQ_API_KEY=<your_groq_api_key>
-NVIDIA_API_KEY=<your_nvidia_api_key>
-NVIDIA_API_URL=https://integrate.api.nvidia.com/v1/chat/completions
-NVIDIA_API_MODEL=meta/llama-3.1-70b-instruct
-CLOUDINARY_URL=<your_cloudinary_url>
-```
-
 ---
 
 ## Default Endpoints
-* **Frontend Application**: `http://localhost` (Cổng 80)
+* **Production Live Web App**: [https://learningenglish.id.vn](https://learningenglish.id.vn/)
+* **Local Development Web App**: `http://localhost` (Cổng 80)
 * **Backend REST Services**: `http://localhost:8081` (Cổng 8081)
-* **PostgreSQL Database**: `localhost:5432`
 
 ---
 
