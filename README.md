@@ -118,67 +118,213 @@ sequenceDiagram
 
 ---
 
-## Entity Relationship Schema
+## Complete Entity Relationship Schema (19 Tables)
 
 ```mermaid
 erDiagram
-    ACCOUNT ||--o{ VOCAB_DECK : "owns"
-    ACCOUNT ||--o{ ASSESSMENT_LOG : "generates"
-    VOCAB_DECK ||--o{ FLASHCARD : "contains"
-    LESSON_ITEM ||--o{ EXERCISE_ITEM : "includes"
-    EXERCISE_ITEM ||--o{ ASSESSMENT_LOG : "targets"
+    %% User & Authentication Module
+    USERS ||--o{ PASSWORD_RESET_TOKENS : "has"
+    USERS ||--o{ DOCUMENTS : "uploads"
+    USERS ||--o{ FLASHCARD_DECKS : "owns"
+    USERS ||--o{ USER_FLASHCARD_PROGRESS : "tracks"
+    USERS ||--o{ MATCHING_RESULTS : "plays"
+    USERS ||--o{ USER_ATTEMPTS : "attempts"
+    USERS ||--o{ SPEAKING_RECORDINGS : "records"
+    USERS ||--o{ WRITING_SUBMISSIONS : "submits"
 
-    ACCOUNT {
-        bigint id PK
+    %% Vocabulary & Flashcard Module
+    DOCUMENTS ||--o{ FLASHCARD_DECKS : "sources"
+    FLASHCARD_DECKS ||--o{ FLASHCARDS : "contains"
+    FLASHCARD_DECKS ||--o{ MATCHING_RESULTS : "has_games"
+    FLASHCARDS ||--o{ USER_FLASHCARD_PROGRESS : "has_status"
+
+    %% Listening & Reading Module
+    VIDEOS ||--o{ SUBTITLES : "has"
+    VIDEOS ||--o{ EXERCISES : "attaches"
+    EXERCISES ||--o{ QUESTIONS : "contains"
+    QUESTIONS ||--o{ ANSWER_OPTIONS : "has_options"
+
+    %% Attempts & Answers Subsystem
+    EXERCISES ||--o{ USER_ATTEMPTS : "recorded_in"
+    USER_ATTEMPTS ||--o{ USER_ANSWERS : "contains"
+    QUESTIONS ||--o{ USER_ANSWERS : "answers"
+    ANSWER_OPTIONS ||--o{ USER_ANSWERS : "selects"
+
+    %% Speaking Module (AI Speech Analysis)
+    SPEAKING_RECORDINGS ||--o{ SPEAKING_ANALYSES : "analyzed_by"
+
+    %% Writing Module (AI Essay Feedback)
+    WRITING_PROMPTS ||--o{ WRITING_SUBMISSIONS : "has_submissions"
+    WRITING_SUBMISSIONS ||--o{ WRITING_FEEDBACKS : "evaluated_by"
+
+    USERS {
+        uuid id PK
         string email UK
-        string password_hash
         string full_name
-        string role "STUDENT | ADMIN"
+        string role "student | admin"
+        string status "active | locked"
+        string primary_learning_language "en | zh"
         timestamp created_at
     }
 
-    VOCAB_DECK {
-        bigint id PK
-        bigint account_id FK
-        string title
+    PASSWORD_RESET_TOKENS {
+        uuid id PK
+        uuid user_id FK
+        string otp_code
+        timestamp expires_at
+        boolean is_used
+    }
+
+    DOCUMENTS {
+        uuid id PK
+        uuid uploaded_by FK
+        string file_name
+        string file_type "txt | csv | docx | text_paste"
+        string file_url
+        int file_size_kb
+    }
+
+    FLASHCARD_DECKS {
+        uuid id PK
+        uuid owner_id FK
+        uuid source_document_id FK
+        string name
         string language "en | zh"
         boolean is_public
+    }
+
+    FLASHCARDS {
+        uuid id PK
+        uuid deck_id FK
+        string term
+        string phonetic "IPA | Pinyin"
+        string meaning_vi
+        text example_sentence
+        string audio_url
+        boolean is_ai_generated
+        boolean is_edited
+    }
+
+    USER_FLASHCARD_PROGRESS {
+        uuid id PK
+        uuid user_id FK
+        uuid flashcard_id FK
+        string status "new | learning | mastered"
+        timestamp last_reviewed_at
+    }
+
+    MATCHING_RESULTS {
+        uuid id PK
+        uuid user_id FK
+        uuid deck_id FK
+        int score
+        float time_seconds
+        timestamp played_at
+    }
+
+    VIDEOS {
+        uuid id PK
+        string title
+        string language "en | zh"
+        string video_source_type "youtube | upload"
+        string video_url
+        int duration_seconds
+    }
+
+    SUBTITLES {
+        uuid id PK
+        uuid video_id FK
+        string subtitle_language "source | vi"
+        float start_time
+        float end_time
+        text text_content
+    }
+
+    EXERCISES {
+        uuid id PK
+        uuid video_id FK
+        string title
+        string exercise_skill_type "listening | reading"
+        string language "en | zh"
+    }
+
+    QUESTIONS {
+        uuid id PK
+        uuid exercise_id FK
+        string question_type "multiple_choice | fill_blank"
+        text question_text
+        int order_index
+    }
+
+    ANSWER_OPTIONS {
+        uuid id PK
+        uuid question_id FK
+        text option_text
+        boolean is_correct
+    }
+
+    USER_ATTEMPTS {
+        uuid id PK
+        uuid user_id FK
+        uuid exercise_id FK
+        float score
+        int total_questions
+        int correct_answers
+        timestamp completed_at
+    }
+
+    USER_ANSWERS {
+        uuid id PK
+        uuid attempt_id FK
+        uuid question_id FK
+        uuid selected_option_id FK
+        text user_text_answer
+        boolean is_correct
+    }
+
+    SPEAKING_RECORDINGS {
+        uuid id PK
+        uuid user_id FK
+        string language "en | zh"
+        string audio_url
+        int duration_seconds
         timestamp created_at
     }
 
-    FLASHCARD {
-        bigint id PK
-        bigint deck_id FK
-        string term
-        string phonetic "IPA / Pinyin"
-        string meaning
-        string example_sentence
-        boolean is_mastered
+    SPEAKING_ANALYSES {
+        uuid id PK
+        uuid recording_id FK
+        text transcript
+        float pronunciation_score
+        float grammar_score
+        float overall_score
+        text ai_feedback_json
     }
 
-    LESSON_ITEM {
-        bigint id PK
+    WRITING_PROMPTS {
+        uuid id PK
         string title
-        string skill_type "LISTENING | READING | SPEAKING | WRITING"
         string language "en | zh"
-        string media_url
-        text content
+        text prompt_text
+        string target_level
     }
 
-    EXERCISE_ITEM {
-        bigint id PK
-        bigint lesson_id FK
-        string exercise_type "MULTIPLE_CHOICE | FILL_BLANK | AI_SPEAKING | AI_WRITING"
-        text question_data
-    }
-
-    ASSESSMENT_LOG {
-        bigint id PK
-        bigint account_id FK
-        bigint exercise_id FK
-        float score
-        text ai_feedback
+    WRITING_SUBMISSIONS {
+        uuid id PK
+        uuid prompt_id FK
+        uuid user_id FK
+        text submission_text
+        int word_count
         timestamp submitted_at
+    }
+
+    WRITING_FEEDBACKS {
+        uuid id PK
+        uuid submission_id FK
+        float grammar_score
+        float vocabulary_score
+        float overall_score
+        text detailed_feedback_json
     }
 ```
 
